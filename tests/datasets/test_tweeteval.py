@@ -35,6 +35,21 @@ def test_load_tweeteval_maps_numeric_labels(config):
     assert (df["source"] == "tweet_eval").all()
 
 
+def test_load_tweeteval_does_not_filter_neutral_rows(config):
+    # The production sentiment model is binary, but this raw loader decodes
+    # TweetEval's source data faithfully (including "Neutral") — filtering
+    # happens downstream in scripts/run_preprocessing.py, not here.
+    df = load_tweeteval(config, split="test")
+    assert "Neutral" in set(df["label"])
+
+
+def test_load_tweeteval_accepts_neutral_string_label(tmp_path, config):
+    data_dir = Path(config["raw_data_dir"])
+    (data_dir / "sentiment_test.csv").write_text("text,label\nmeh,neutral\ngreat,Positive\n")
+    df = load_tweeteval(config, split="test")
+    assert list(df["label"]) == ["Neutral", "Positive"]
+
+
 def test_load_tweeteval_accepts_string_labels(tmp_path, config):
     data_dir = Path(config["raw_data_dir"])
     (data_dir / "sentiment_test.csv").write_text(

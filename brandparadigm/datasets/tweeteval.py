@@ -4,6 +4,13 @@ Local CSV export limited to the `sentiment` task
 (`sentiment_train.csv` / `sentiment_validation.csv` / `sentiment_test.csv`)
 — every other TweetEval task (emotion, hate, irony, offensive, ...) is
 ignored entirely.
+
+The production sentiment model is binary (Negative/Positive), but
+TweetEval's `sentiment` task is natively 3-class in the source data. This
+loader decodes labels faithfully — including "Neutral" — so no information
+is silently dropped at load time; Neutral rows are filtered out downstream
+during preprocessing (see `scripts/run_preprocessing.py::preprocess_tweeteval`
+and docs/dataset_guide.md).
 """
 
 from pathlib import Path
@@ -13,13 +20,13 @@ import pandas as pd
 from brandparadigm.datasets.local_source import first_matching_column, require_local_file
 from brandparadigm.logging import get_logger
 from brandparadigm.preprocessing.label_mapping import (
-    SENTIMENT_CLASSES,
+    TWEETEVAL_RAW_CLASSES,
     tweeteval_label_to_sentiment,
 )
 
 logger = get_logger(__name__)
 
-_CANONICAL_BY_LOWER = {label.lower(): label for label in SENTIMENT_CLASSES}
+_CANONICAL_BY_LOWER = {label.lower(): label for label in TWEETEVAL_RAW_CLASSES}
 
 
 def _normalize_label(value) -> str:

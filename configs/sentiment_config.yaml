@@ -1,0 +1,79 @@
+# Sentiment model (Model 1) task definition and training configuration.
+#
+# Binary sentiment classification. The only training dataset — Amazon
+# Review Polarity — is itself binary (no Neutral class), so the model
+# predicts Negative/Positive only. See docs/model_cards/roberta_sentiment.md
+# for the full rationale.
+#
+# This label scheme is the single source of truth for the sentiment task;
+# it must stay in sync with brandparadigm.preprocessing.label_mapping's
+# LABEL2ID/ID2LABEL, which is what the code actually imports and uses.
+task_type: binary
+num_labels: 2
+label_mapping:
+  0: Negative
+  1: Positive
+
+model:
+  base_model: cardiffnlp/twitter-roberta-base-sentiment
+  # This checkpoint's pretrained classification head is 3-class
+  # (negative/neutral/positive, trained on Twitter data). Fine-tuning
+  # replaces it with a fresh binary head — see
+  # brandparadigm/sentiment/model.py (ignore_mismatched_sizes=True).
+  max_seq_length: 128
+
+training:
+  # Amazon Review Polarity is the only training dataset: train.csv trains,
+  # test.csv validates/tests (see docs/dataset_guide.md).
+  train_dataset: amazon_reviews
+  validation_dataset: amazon_reviews
+  output_dir: models/sentiment
+  seed: 42
+
+  # Shared Trainer behavior, independent of profile.
+  eval_strategy: epoch
+  save_strategy: epoch
+  load_best_model_at_end: true
+  metric_for_best_model: f1
+  greater_is_better: true
+
+  # Hyperparameter profiles selected via `--profile` on
+  # scripts/run_training_sentiment.py. "smoke_test" is a fast, tiny-sample
+  # correctness check (see docs/architecture.md, "Compute constraints and
+  # reproducibility"); "full" is the real training run, intended for a
+  # GPU-enabled environment.
+  profiles:
+    smoke_test:
+      train_sample_size: 200
+      eval_sample_size: 50
+      num_train_epochs: 1
+      per_device_train_batch_size: 8
+      per_device_eval_batch_size: 8
+      learning_rate: 5.0e-5
+      weight_decay: 0.01
+      warmup_ratio: 0.06
+      early_stopping_patience: 1
+      logging_steps: 5
+    full:
+      train_sample_size: null # no cap — full dataset
+      eval_sample_size: null
+      num_train_epochs: 3
+      per_device_train_batch_size: 16
+      per_device_eval_batch_size: 32
+      learning_rate: 2.0e-5
+      weight_decay: 0.01
+      warmup_ratio: 0.06
+      early_stopping_patience: 2
+      logging_steps: 50
+
+evaluation:
+  # TweetEval remains evaluation-only — never trained on.
+  dataset: tweet_eval
+  split: test
+  # TweetEval's `sentiment` task is natively 3-class; Neutral rows are
+  # dropped automatically before computing metrics, so evaluation always
+  # matches the binary production label space. Filtering happens in
+  # brandparadigm.preprocessing.label_mapping.prepare_binary_sentiment_labels,
+  # used by both scripts/run_preprocessing.py and
+  # brandparadigm.sentiment.evaluate.load_tweeteval_eval_set.
+  exclude_labels: [Neutral]

@@ -13,22 +13,41 @@ manual conversion needed. All verified against fixtures (including a
 synthetic `.zst`); pending the maintainer's real data drop into
 `raw_data/` — see `docs/dataset_guide.md`.
 
-**Epics 3–7 (Phases 3–7) are paused**, at the maintainer's request, on a
-hard environment blocker discovered while starting Phase 3: this session's
-egress policy blocks `huggingface.co` entirely, so no pretrained model
-checkpoint can be downloaded — `AutoTokenizer.from_pretrained("roberta-base")`
-fails outright, and the same applies to DistilBERT and any
-sentence-transformers embedding model BERTopic would use. This isn't a
-compute/scale limitation (that was already scoped via smoke-test profiles)
-— it's a total access issue: none of the three ML models can be
-instantiated at all in this session, pretrained or not.
+**Standing rule as of Phase 3** (applies to every remaining phase): this
+session never stops or pauses because Hugging Face Hub, a GPU, general
+internet access, or a dataset is unavailable. Code is written
+production-ready, assuming those resources are available wherever it
+actually runs; where this session itself can't reach them (e.g.
+`huggingface.co` is blocked by egress policy — confirmed via
+`/__agentproxy/status`, a policy denial, not transient), verification uses
+fully offline substitutes (see `docs/developer_guide.md`, "Testing
+HF-dependent code without network access") rather than stopping. The
+earlier "Epics 3-7 paused" state below no longer applies as of Phase 3.
 
-**To resume**: allowlist `huggingface.co` (and its CDN,
-`cdn-lfs.huggingface.co` / `cdn-lfs-us-1.huggingface.co`) in this session's
-egress policy, then continue from Epic 3 in this same breakdown. No code
-already written needs to change — `brandparadigm/config`,
-`brandparadigm/datasets`, and `brandparadigm/preprocessing` are all
-model-access-independent.
+**Sentiment architecture finalized before implementing Phase 3**: Model 1
+is **binary** (0=Negative, 1=Positive), not 3-class, because the only
+training dataset (Amazon Review Polarity) has no Neutral class.
+`brandparadigm.preprocessing.label_mapping.prepare_binary_sentiment_labels`
+is the single shared function that drops TweetEval's Neutral rows and maps
+the rest to 0/1 — used by both `scripts/run_preprocessing.py` and
+`brandparadigm.sentiment.evaluate`. See
+`docs/model_cards/roberta_sentiment.md` for the full rationale.
+
+**Epic 3 (Phase 3) is implemented, tested, and pushed**: the full binary
+sentiment pipeline (`brandparadigm/sentiment/` — `model.py`, `dataset.py`,
+`train.py`, `evaluate.py`, `predict.py`), config-driven hyperparameters
+(`configs/sentiment_config.yaml`), early stopping, and artifact saving
+(`models/sentiment/metrics.json`, `confusion_matrix.json`,
+`classification_report.json`, `training_history.json`). Base checkpoint:
+`cardiffnlp/twitter-roberta-base-sentiment`, fine-tuned with a fresh binary
+head. **No actual fine-tuning run has executed** in this session (still
+blocked on `huggingface.co`), but the `Trainer` orchestration itself is
+integration-tested end-to-end with a fully offline tiny model/tokenizer —
+see `tests/sentiment/` and `docs/model_cards/roberta_sentiment.md`,
+"Testing".
+
+**Epics 4–7 (Phases 4–7) are next**, not paused — to be implemented under
+the same standing rule above.
 
 This document is the project-management source of truth in lieu of a live
 GitHub Projects board (the tools available to this session can create
@@ -53,17 +72,17 @@ criteria, dependencies, priority (P0 highest), and an hour estimate.
 
 | Task | Acceptance Criteria | Depends on | Priority | Est. (h) |
 |---|---|---|---|---|
-| Amazon Reviews loader | Confirms live HF config names, returns normalized `{text, rating, source}` | Epic 1 | P0 | 3 |
-| TweetEval loader | Loads `tweet_eval`/`sentiment`, normalized schema | Epic 1 | P0 | 1 |
-| Reddit historical loader | Confirms live HF dataset, filters to product/tech subreddits | Epic 1 | P0 | 3 |
-| Preprocessing (clean text, label mapping) | Unit-tested against fixtures; star rating → 3-class mapping matches spec | Loaders | P0 | 3 |
+| Amazon Reviews loader | Reads local Amazon Review Polarity `train.csv`/`test.csv`, returns normalized `{text, polarity, source}` | Epic 1 | P0 | 3 |
+| TweetEval loader | Reads local `sentiment_{train,validation,test}.csv`, normalized schema | Epic 1 | P0 | 1 |
+| Reddit historical loader | Streams local `RS_YYYY-MM.zst` directly via `zstandard`, filters to product/tech subreddits | Epic 1 | P0 | 3 |
+| Preprocessing (clean text, label mapping) | Unit-tested against fixtures; binary label mapping (0=Negative, 1=Positive) matches spec; TweetEval Neutral rows dropped before evaluation | Loaders | P0 | 3 |
 | Dataset guide + EDA | `docs/dataset_guide.md` documents confirmed configs, schema, label distribution | Loaders, preprocessing | P1 | 2 |
 
 ## Epic 3 — Sentiment Model (Phase 3)
 
 | Task | Acceptance Criteria | Depends on | Priority | Est. (h) |
 |---|---|---|---|---|
-| RoBERTa model/tokenizer wrapper | 3-class head, label2id fixed and tested | Epic 2 | P0 | 2 |
+| RoBERTa model/tokenizer wrapper | Binary head (num_labels=2), label2id fixed and tested | Epic 2 | P0 | 2 |
 | Training pipeline (`Trainer`, config-driven) | `smoke_test` profile runs end-to-end on CPU, checkpoint persists | Model wrapper | P0 | 4 |
 | Evaluation on TweetEval | Never trains on TweetEval; reports accuracy/F1/confusion matrix | Training pipeline | P0 | 2 |
 | Inference wrapper for API | `predict(text) -> {label, scores}` | Training pipeline | P0 | 1 |

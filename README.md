@@ -21,10 +21,13 @@ historical review/social data (no live APIs — see `docs/dataset_guide.md`).
 ## Architecture
 
 Three ML components, chained into one pipeline: a fine-tuned RoBERTa
-sentiment classifier, BERTopic for unsupervised topic discovery, and a
-topic classifier (best of Logistic Regression / DistilBERT) that maps text
-to one of seven business categories. Full pipeline diagram, dataset
-choices, and software layout: **[docs/architecture.md](docs/architecture.md)**.
+**binary** sentiment classifier (Negative/Positive — the only training
+dataset, Amazon Review Polarity, has no Neutral class; see
+[docs/model_cards/roberta_sentiment.md](docs/model_cards/roberta_sentiment.md)),
+BERTopic for unsupervised topic discovery, and a topic classifier (best of
+Logistic Regression / DistilBERT) that maps text to one of seven business
+categories. Full pipeline diagram, dataset choices, and software layout:
+**[docs/architecture.md](docs/architecture.md)**.
 
 ```
 brandparadigm/
@@ -77,7 +80,7 @@ begins.
 
 - [x] **Phase 1** — Repository scaffold, tooling, documentation
 - [x] **Phase 2** — Dataset loaders, preprocessing, dataset guide
-- [ ] **Phase 3** — RoBERTa sentiment fine-tuning, evaluation on TweetEval
+- [x] **Phase 3** — RoBERTa sentiment fine-tuning, evaluation on TweetEval
 - [ ] **Phase 4** — BERTopic discovery, topic classifier (LogReg vs DistilBERT)
 - [ ] **Phase 5** — FastAPI inference service
 - [ ] **Phase 6** — Streamlit dashboard
