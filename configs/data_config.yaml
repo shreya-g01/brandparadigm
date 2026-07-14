@@ -1,0 +1,39 @@
+# Dataset sourcing and schema configuration.
+# See docs/dataset_guide.md for the full rationale and how to provision
+# each source.
+
+amazon_reviews:
+  # Dataset 1 (training): user-provided local export, since this session's
+  # egress policy blocks the McAuley Lab / Hugging Face hosts. Drop one or
+  # more CSV/JSON/JSONL files under `raw_data_dir` below.
+  raw_data_dir: raw_data/amazon_reviews
+  file_pattern: "*.csv,*.json,*.jsonl"
+  # Column-name aliases checked in order (first match wins) so the loader
+  # works whether you export the classic McAuley schema (reviewText/overall)
+  # or the 2023 schema (text/rating).
+  text_columns: [reviewText, text, review_text, review_body]
+  rating_columns: [overall, rating, star_rating, score]
+  category_columns: [category, main_category, product_category]
+  categories_of_interest: [Electronics, Cell Phones and Accessories]
+
+tweet_eval:
+  # Dataset 2 (evaluation only): official cardiffnlp/tweeteval GitHub repo,
+  # reachable directly (no HF Hub needed).
+  base_url: https://raw.githubusercontent.com/cardiffnlp/tweeteval/main/datasets/sentiment
+  splits: [train, val, test]
+
+reddit:
+  # Dataset 3 (inference): user-provided local historical export (static
+  # dump, no live Reddit API). Drop one or more CSV/JSON/JSONL files under
+  # `raw_data_dir` below.
+  raw_data_dir: raw_data/reddit
+  file_pattern: "*.csv,*.json,*.jsonl"
+  text_columns: [selftext, body, text, review_text]
+  title_columns: [title]
+  subreddit_columns: [subreddit]
+  subreddit_allowlist:
+    [apple, samsung, GooglePixel, oneplus, android, gadgets, technology]
+
+sample_size:
+  smoke_test: 500
+  full: null # no cap — full dataset
