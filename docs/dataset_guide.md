@@ -1,5 +1,29 @@
 # Dataset Guide
 
+## Binary sentiment: why, and what it means for each dataset
+
+Model 1's production label scheme is **binary**: 0 = Negative,
+1 = Positive (`brandparadigm.preprocessing.label_mapping.LABEL2ID`,
+`configs/sentiment_config.yaml`). The only training dataset, Amazon Review
+Polarity, is itself binary — it has no Neutral class — so rather than
+fabricate one or switch training datasets, the whole sentiment task is
+defined as binary end-to-end. Concretely:
+
+- **Amazon Review Polarity** (training + validation): already binary,
+  maps directly to 0/1.
+- **TweetEval `sentiment`** (evaluation only): natively 3-class in the
+  source data. The loader decodes it faithfully (including "Neutral"), but
+  `scripts/run_preprocessing.py::preprocess_tweeteval` **drops every
+  Neutral row before computing the binary `sentiment_label`**, so
+  evaluation only ever compares Negative vs Positive — the same label
+  space the model actually predicts.
+- **Reddit**: unlabeled, inference-only; sentiment on Reddit posts comes
+  from Model 1's predictions, not ground-truth labels, so binary vs 3-class
+  is not applicable here.
+
+See `docs/architecture.md` ("Why binary sentiment, not 3-class") and
+`docs/model_cards/roberta_sentiment.md` for the full rationale.
+
 ## Environment constraint: dataset provisioning
 
 This session's egress policy blocks `huggingface.co`, `kaggle.com`,
@@ -24,19 +48,22 @@ version of the Amazon Reviews corpus.
 `.../test.csv`. Headerless CSVs, fixed columns `[polarity, title, text]`
 (configurable in `configs/data_config.yaml` — `amazon_reviews.columns`).
 
-**Label mapping** (`brandparadigm.preprocessing.amazon_polarity_to_sentiment`):
-`polarity == 1` → Negative, `polarity == 2` → Positive. This dataset is
-binary — there is no Neutral class from this source (Neutral coverage for
-Model 1 comes from TweetEval during evaluation and, at inference time, from
-Reddit posts the model itself classifies as Neutral).
+**Label mapping**: `polarity == 1` → Negative, `polarity == 2` → Positive
+(`brandparadigm.preprocessing.amazon_polarity_to_sentiment`), then to the
+binary int scheme via `LABEL2ID` (`Negative` → 0, `Positive` → 1). This
+dataset is binary — there is no Neutral class from this source, which is
+why the project's production sentiment scheme is binary end-to-end (see
+"Binary sentiment" above).
 
 **Loader**: `brandparadigm.datasets.load_amazon_reviews(config, split=...)`
 — `split` is `"train"`, `"test"`, or `"all"` (concatenates both files).
-`title` and `text` are combined into a single `text` field. →
+Per this refactor, **`train.csv` is used for training and `test.csv` for
+validation/testing** (`configs/sentiment_config.yaml`). `title` and `text`
+are combined into a single `text` field. →
 `scripts/download_datasets.py --dataset amazon` → normalized
 `raw_data/processed/amazon_raw.csv` `[text, polarity, source]` →
 `scripts/run_preprocessing.py --dataset amazon` → `amazon_clean.csv` adds
-`sentiment_label`.
+`sentiment_label` (int, 0 or 1).
 
 Verified against a 5-row fixture
 (`tests/fixtures/amazon_review_polarity_sample.csv`) — see
@@ -61,14 +88,20 @@ task (emotion, hate, irony, offensive, ...) is ignored entirely.
 | Sentiment label | `label`, `sentiment` |
 
 Labels may be either the original `0=Negative, 1=Neutral, 2=Positive` int
-encoding or already-string labels (`"positive"`, `"Negative"`, ... —
-matched case-insensitively); both are normalized to the project's 3-class
-scheme by `brandparadigm.datasets.tweeteval._normalize_label`.
+encoding or already-string labels (`"positive"`, `"Negative"`, `"neutral"`,
+... — matched case-insensitively); both are decoded faithfully — including
+Neutral — by `brandparadigm.datasets.tweeteval._normalize_label`. **The raw
+loader does not filter anything out**; it exists to represent TweetEval's
+actual 3-class source data without information loss.
 
 **Loader**: `brandparadigm.datasets.load_tweeteval(config, split=...)` —
 `split` is `"train"`, `"validation"`, or `"test"` →
 `scripts/download_datasets.py --dataset tweeteval` → `tweeteval_raw.csv`
-`[text, label, source]` → `run_preprocessing.py` → `tweeteval_clean.csv`.
+`[text, label, source]` (may still contain "Neutral" rows) →
+`run_preprocessing.py` → **`preprocess_tweeteval` drops every row where
+`label == "Neutral"`, then maps the remaining Negative/Positive rows to
+`sentiment_label` (int, 0 or 1) via `LABEL2ID`** → `tweeteval_clean.csv`
+(binary-only, ready to evaluate directly against Model 1's predictions).
 
 Verified against a 5-row fixture
 (`tests/fixtures/tweeteval_sentiment_sample.csv`) — see

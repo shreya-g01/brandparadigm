@@ -1,0 +1,31 @@
+# Sentiment model (Model 1) task definition.
+#
+# Binary sentiment classification. The only training dataset — Amazon
+# Review Polarity — is itself binary (no Neutral class), so the model
+# predicts Negative/Positive only. See docs/model_cards/roberta_sentiment.md
+# for the full rationale.
+#
+# This label scheme is the single source of truth for the sentiment task;
+# it must stay in sync with brandparadigm.preprocessing.label_mapping's
+# LABEL2ID/ID2LABEL, which is what the code actually imports and uses.
+task_type: binary
+num_labels: 2
+label_mapping:
+  0: Negative
+  1: Positive
+
+training:
+  base_model: roberta-base
+  # Amazon Review Polarity is the only training dataset.
+  train_dataset: amazon_reviews # amazon_review_polarity_csv/train.csv
+  validation_dataset: amazon_reviews # amazon_review_polarity_csv/test.csv, split="test"
+
+evaluation:
+  # TweetEval remains evaluation-only — never trained on.
+  dataset: tweet_eval
+  # TweetEval's `sentiment` task is natively 3-class; Neutral rows are
+  # dropped before computing metrics so evaluation matches the binary
+  # production label space. Filtering happens in
+  # scripts/run_preprocessing.py::preprocess_tweeteval, so tweeteval_clean.csv
+  # is already Neutral-free by the time evaluation reads it.
+  exclude_labels: [Neutral]

@@ -13,13 +13,15 @@ into brand-level insights.
 ## ML pipeline
 
 ```
-Amazon Reviews (train)
+Amazon Review Polarity (train.csv)
         │
-Preprocessing (clean text, star → 3-class label)
+Preprocessing (clean text, polarity → binary label: 0=Negative, 1=Positive)
         │
-Fine-tune RoBERTa  ───────────────► Model 1: Sentiment Classifier
+Fine-tune RoBERTa  ───────────────► Model 1: Binary Sentiment Classifier
         │
-Evaluate using TweetEval (held-out, never trained on)
+Validate using Amazon Review Polarity (test.csv)
+        │
+Evaluate using TweetEval sentiment (Neutral rows dropped, held-out, never trained on)
         │
 Save Best Model
         │
@@ -43,17 +45,35 @@ Dashboard (Streamlit) / API (FastAPI)
 
 | # | Model | Purpose | Input | Output |
 |---|-------|---------|-------|--------|
-| 1 | Fine-tuned RoBERTa (`roberta-base`) | Sentiment classification | Review/post text | Positive / Neutral / Negative |
+| 1 | Fine-tuned RoBERTa (`roberta-base`) | **Binary** sentiment classification | Review/post text | Negative (0) / Positive (1) |
 | 2 | BERTopic | Unsupervised topic discovery | Reddit post text | Discovered discussion themes |
 | 3 | Topic Classifier (best of LogisticRegression / DistilBERT) | Business-category prediction | Review/post text | Product Quality, Battery, Customer Service, Delivery, Pricing, Features, Design |
+
+### Why binary sentiment, not 3-class
+
+The master spec originally called for Positive/Neutral/Negative. The only
+dataset Model 1 trains on — Amazon Review Polarity — is itself binary (no
+Neutral class exists in the source data). Rather than fabricate a Neutral
+label (e.g. by treating some score threshold as "Neutral" on a dataset that
+doesn't encode one) or switch to a different, star-rated training dataset,
+the sentiment task was redefined as binary end-to-end: 0=Negative,
+1=Positive. This keeps every label the model ever sees grounded in real
+annotations. See `docs/model_cards/roberta_sentiment.md` for the full
+rationale and `configs/sentiment_config.yaml` for the task definition
+(`task_type: binary`, `num_labels: 2`).
+
+TweetEval's `sentiment` task is natively 3-class, so its Neutral rows are
+filtered out during preprocessing before evaluation metrics are computed —
+evaluation compares apples to apples against the binary production label
+space. See `docs/dataset_guide.md`.
 
 ## Datasets
 
 | # | Dataset | Role | Notes |
 |---|---------|------|-------|
-| 1 | Amazon Review Polarity (Zhang et al.), local `train.csv`/`test.csv` | Train Model 1 | Binary `polarity` (1=Negative, 2=Positive) — no Neutral class from this source |
-| 2 | TweetEval, `sentiment` task only, local `sentiment_{train,validation,test}.csv` | Evaluate Model 1 only | Never trained on — held out to test generalization beyond Amazon's domain; every other TweetEval task ignored |
-| 3 | Historical Reddit Submissions archive (`RS_2019-04.zst`), read directly, filtered to tech/product subreddits | Inference for Models 1–3, dashboard | Static historical dump, no live Reddit API; default 20,000-row sample |
+| 1 | Amazon Review Polarity (Zhang et al.), local `train.csv`/`test.csv` | Train (`train.csv`) + validate (`test.csv`) Model 1 | Binary `polarity` (1=Negative, 2=Positive) — the source of the project's binary label scheme |
+| 2 | TweetEval, `sentiment` task only, local `sentiment_{train,validation,test}.csv` | Evaluate Model 1 only | Never trained on; Neutral rows dropped during preprocessing so evaluation is binary-only; every other TweetEval task ignored |
+| 3 | Historical Reddit Submissions archive (`RS_2019-04.zst`), read directly, filtered to tech/product subreddits | Inference for Models 1–3, dashboard | Static historical dump, no live Reddit API, no labels; default 20,000-row sample |
 
 See `docs/dataset_guide.md` for the exact configs confirmed during Phase 2
 and their schemas.
