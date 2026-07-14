@@ -6,6 +6,9 @@
 .python-version
 *.pyc
 **/build
+.pytest_cache/
+.ruff_cache/
+*.egg
 
 # Ignore these macos generated files
 .DS_Store
@@ -13,23 +16,26 @@
 # Ignore these Windows generated files
 *Zone.Identifier
 
-# Ignore VS Code generated files
-*.vscode
+# Ignore VS Code / IDE generated files
+.vscode/
+.idea/
 
-# Raw data
-raw_data/
+# Raw data (large historical datasets pulled by scripts/download_datasets.py)
+raw_data/*
+!raw_data/.gitkeep
 *.csv
 *.sqlite
 *.zip
+*.parquet
 
-# Data in the package
-# Add files you want to include in the git repo using `git add -f file_name`
-data/
-
-# Saved models
-models/
+# Saved models / checkpoints
+models/*
+!models/.gitkeep
 *.joblib
 *.h5
+*.bin
+*.safetensors
+*.pt
 
 # Any pickle files
 *.pickle
@@ -41,7 +47,12 @@ models/
 .env.yaml
 .credentials
 secrets.toml
-*.json
+
+# Only ignore JSON that holds credentials or generated run output, never
+# tracked configs/metrics/notebook metadata.
+*.credentials.json
+*.secrets.json
+mlruns/
+wandb/
 
 # User defined extras
-# Complete to your desire

@@ -1,0 +1,92 @@
+# Architecture
+
+## Business problem
+
+Businesses collect thousands of customer reviews but lack a reliable way to
+turn that unstructured text into structured intelligence: overall sentiment,
+recurring pain points, and how they compare to competitors. Generic
+sentiment tools and keyword search don't capture domain-specific nuance.
+BrandParadigm turns raw reviews/posts into three structured signals
+(sentiment, discovered topics, business-category topic) and aggregates them
+into brand-level insights.
+
+## ML pipeline
+
+```
+Amazon Reviews (train)
+        │
+Preprocessing (clean text, star → 3-class label)
+        │
+Fine-tune RoBERTa  ───────────────► Model 1: Sentiment Classifier
+        │
+Evaluate using TweetEval (held-out, never trained on)
+        │
+Save Best Model
+        │
+Historical Reddit Dataset (inference-only, no live API)
+        │
+Sentiment Prediction (Model 1 applied to Reddit posts)
+        │
+BERTopic  ─────────────────────────► Model 2: Topic Discovery
+        │
+Manual Topic Validation (discovered topics → 7 business categories)
+        │
+Topic Classifier (LogisticRegression vs DistilBERT, best selected)
+                                    ► Model 3: Business-Category Classifier
+        │
+Business Insights (brandparadigm.analytics)
+        │
+Dashboard (Streamlit) / API (FastAPI)
+```
+
+## Three ML components
+
+| # | Model | Purpose | Input | Output |
+|---|-------|---------|-------|--------|
+| 1 | Fine-tuned RoBERTa (`roberta-base`) | Sentiment classification | Review/post text | Positive / Neutral / Negative |
+| 2 | BERTopic | Unsupervised topic discovery | Reddit post text | Discovered discussion themes |
+| 3 | Topic Classifier (best of LogisticRegression / DistilBERT) | Business-category prediction | Review/post text | Product Quality, Battery, Customer Service, Delivery, Pricing, Features, Design |
+
+## Datasets
+
+| # | Dataset | Role | Notes |
+|---|---------|------|-------|
+| 1 | Amazon Reviews (`McAuley-Lab/Amazon-Reviews-2023`, Electronics / Cell_Phones_and_Accessories) | Train Model 1 | `text` + `rating` → 3-class label (1–2★ Negative, 3★ Neutral, 4–5★ Positive) |
+| 2 | TweetEval (`tweet_eval`, `sentiment` config) | Evaluate Model 1 only | Never trained on — held out to test generalization beyond Amazon's domain |
+| 3 | Historical Reddit dump (`webis/tldr-17`, filtered to tech/product subreddits) | Inference for Models 1–3, dashboard | Static historical dump, no live Reddit API |
+
+See `docs/dataset_guide.md` for the exact configs confirmed during Phase 2
+and their schemas.
+
+## Software architecture
+
+Monorepo, Le Wagon base-project layout:
+
+- **`brandparadigm/`** — the installable package. All business logic lives
+  here (preprocessing, dataset loaders, model training/inference, analytics,
+  visualization, config, logging, utils). No subpackage imports from `api/`
+  or `dashboard/` — dependency direction is one-way: `api`/`dashboard` →
+  `brandparadigm`.
+- **`api/`** — FastAPI service. Thin HTTP layer: request/response schemas,
+  dependency-injected model loading, routers that call into
+  `brandparadigm.sentiment` / `topic_classifier` / `analytics`.
+- **`dashboard/`** — Streamlit app. Pages contain only layout/UI calls;
+  data loading and chart-building logic live in `dashboard/components/` and
+  `brandparadigm/visualization/`.
+- **`scripts/`** — CLI entrypoints (`download_datasets.py`,
+  `run_training_sentiment.py`, ...) that wrap package functions for the
+  command line / `Makefile` targets. No business logic here either.
+- **`notebooks/`** — experimentation only. Once validated, code is moved
+  into `brandparadigm/`; notebooks call the package, they don't reimplement it.
+- **`tests/`** — mirrors `brandparadigm/`, plus `api/` and `dashboard/`
+  smoke tests.
+- **`configs/`** — YAML configuration per component (dataset sampling,
+  training hyperparameters, topic label mapping).
+
+## Compute constraints and reproducibility
+
+Training was developed and smoke-tested on CPU-only hardware. Every
+training script exposes a `smoke_test` profile (tiny sample, 1 epoch) used
+for correctness verification in CI/dev, and a `full` profile intended to run
+on a GPU machine before Demo Day. This keeps the repository reproducible
+without requiring GPU access to validate the code.

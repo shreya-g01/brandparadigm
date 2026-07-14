@@ -1,0 +1,34 @@
+# Core numerical / data
+numpy<2.0
+pandas
+scikit-learn
+pyyaml
+
+# Deep learning (installed from the CPU wheel index by `make install` —
+# see Makefile / docs/installation.md)
+torch
+transformers
+datasets
+accelerate
+sentence-transformers
+
+# Topic modeling
+bertopic
+umap-learn
+hdbscan
+
+# API
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-dotenv
+httpx
+
+# Dashboard
+streamlit
+plotly
+
+# Text preprocessing
+beautifulsoup4
+emoji
