@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     raw_data_dir: str = Field(default=str(RAW_DATA_DIR))
     processed_data_dir: str = Field(default=str(PROCESSED_DATA_DIR))
 
-    model_sentiment_path: str = Field(default=str(MODELS_DIR / "sentiment_roberta"))
+    model_sentiment_path: str = Field(default=str(MODELS_DIR / "sentiment"))
     model_topic_model_path: str = Field(default=str(MODELS_DIR / "bertopic_model"))
     model_topic_classifier_path: str = Field(default=str(MODELS_DIR / "topic_classifier"))
 

@@ -13,10 +13,12 @@ defined as binary end-to-end. Concretely:
   maps directly to 0/1.
 - **TweetEval `sentiment`** (evaluation only): natively 3-class in the
   source data. The loader decodes it faithfully (including "Neutral"), but
-  `scripts/run_preprocessing.py::preprocess_tweeteval` **drops every
-  Neutral row before computing the binary `sentiment_label`**, so
-  evaluation only ever compares Negative vs Positive — the same label
-  space the model actually predicts.
+  `brandparadigm.preprocessing.label_mapping.prepare_binary_sentiment_labels`
+  **drops every Neutral row before computing the binary
+  `sentiment_label`** — used by both `scripts/run_preprocessing.py` and
+  `brandparadigm.sentiment.evaluate.load_tweeteval_eval_set` — so
+  evaluation only ever compares Negative vs Positive, the same label space
+  the model actually predicts.
 - **Reddit**: unlabeled, inference-only; sentiment on Reddit posts comes
   from Model 1's predictions, not ground-truth labels, so binary vs 3-class
   is not applicable here.
@@ -102,6 +104,9 @@ actual 3-class source data without information loss.
 `label == "Neutral"`, then maps the remaining Negative/Positive rows to
 `sentiment_label` (int, 0 or 1) via `LABEL2ID`** → `tweeteval_clean.csv`
 (binary-only, ready to evaluate directly against Model 1's predictions).
+`brandparadigm.sentiment.evaluate.load_tweeteval_eval_set` does the same
+filtering self-contained (reads straight from `raw_data/tweeteval/`,
+doesn't require the CSV cache to exist) for use during model evaluation.
 
 Verified against a 5-row fixture
 (`tests/fixtures/tweeteval_sentiment_sample.csv`) — see

@@ -20,7 +20,12 @@ import pandas as pd
 from brandparadigm.config.paths import PROCESSED_DATA_DIR
 from brandparadigm.datasets import DATASET_NAMES
 from brandparadigm.logging import get_logger
-from brandparadigm.preprocessing import LABEL2ID, amazon_polarity_to_sentiment, clean_text
+from brandparadigm.preprocessing import (
+    LABEL2ID,
+    amazon_polarity_to_sentiment,
+    clean_text,
+    prepare_binary_sentiment_labels,
+)
 from brandparadigm.utils import ensure_dir
 
 logger = get_logger(__name__)
@@ -38,9 +43,8 @@ def preprocess_tweeteval(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["text"] = df["text"].map(clean_text)
     before = len(df)
-    df = df[df["label"] != "Neutral"].copy()
+    df = prepare_binary_sentiment_labels(df, label_column="label")
     logger.info("Dropped %d Neutral rows for binary evaluation", before - len(df))
-    df["sentiment_label"] = df["label"].map(LABEL2ID)
     return df[df["text"].str.len() > 0].reset_index(drop=True)
 
 

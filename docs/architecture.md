@@ -45,9 +45,15 @@ Dashboard (Streamlit) / API (FastAPI)
 
 | # | Model | Purpose | Input | Output |
 |---|-------|---------|-------|--------|
-| 1 | Fine-tuned RoBERTa (`roberta-base`) | **Binary** sentiment classification | Review/post text | Negative (0) / Positive (1) |
+| 1 | Fine-tuned RoBERTa (`cardiffnlp/twitter-roberta-base-sentiment`, binary head) | **Binary** sentiment classification | Review/post text | Negative (0) / Positive (1) |
 | 2 | BERTopic | Unsupervised topic discovery | Reddit post text | Discovered discussion themes |
 | 3 | Topic Classifier (best of LogisticRegression / DistilBERT) | Business-category prediction | Review/post text | Product Quality, Battery, Customer Service, Delivery, Pricing, Features, Design |
+
+**Implementation status**: Model 1's pipeline (`brandparadigm/sentiment/`)
+is fully implemented and tested (Phase 3) — training/evaluation code,
+config, and artifacts are production-ready, but no actual fine-tuning run
+has executed in this session (see `docs/model_cards/roberta_sentiment.md`,
+"Status"). Models 2–3 (Phases 4+) are not yet implemented.
 
 ### Why binary sentiment, not 3-class
 

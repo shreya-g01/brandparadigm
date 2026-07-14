@@ -80,7 +80,7 @@ begins.
 
 - [x] **Phase 1** — Repository scaffold, tooling, documentation
 - [x] **Phase 2** — Dataset loaders, preprocessing, dataset guide
-- [ ] **Phase 3** — RoBERTa sentiment fine-tuning, evaluation on TweetEval
+- [x] **Phase 3** — RoBERTa sentiment fine-tuning, evaluation on TweetEval
 - [ ] **Phase 4** — BERTopic discovery, topic classifier (LogReg vs DistilBERT)
 - [ ] **Phase 5** — FastAPI inference service
 - [ ] **Phase 6** — Streamlit dashboard

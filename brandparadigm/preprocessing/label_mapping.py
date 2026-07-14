@@ -10,10 +10,13 @@ for the full rationale.
 TweetEval's `sentiment` task is natively 3-class in the source data
 (Negative/Neutral/Positive). Its raw labels are decoded faithfully by
 `tweeteval_label_to_sentiment` so the loader doesn't silently drop
-information — Neutral rows are filtered out downstream, during
-preprocessing (see `scripts/run_preprocessing.py::preprocess_tweeteval`),
-before they ever reach evaluation metrics.
+information — Neutral rows are filtered out downstream by
+`prepare_binary_sentiment_labels`, before they ever reach evaluation
+metrics (used by both `scripts/run_preprocessing.py` and
+`brandparadigm.sentiment.evaluate`).
 """
+
+import pandas as pd
 
 # Production label scheme: what the trained model actually predicts.
 SENTIMENT_CLASSES = ["Negative", "Positive"]
@@ -34,3 +37,17 @@ def amazon_polarity_to_sentiment(polarity: int) -> str:
 def tweeteval_label_to_sentiment(label: int) -> str:
     """Decode TweetEval's raw 0/1/2 encoding — may return "Neutral"."""
     return TWEETEVAL_ID2LABEL[int(label)]
+
+
+def prepare_binary_sentiment_labels(df: pd.DataFrame, label_column: str = "label") -> pd.DataFrame:
+    """Drop Neutral rows and map the remaining labels to the binary 0/1 scheme.
+
+    Shared by `scripts/run_preprocessing.py::preprocess_tweeteval` and
+    `brandparadigm.sentiment.evaluate.load_tweeteval_eval_set` so the
+    "evaluation is binary-only" rule is enforced in exactly one place.
+    Only relevant to datasets whose raw labels may include "Neutral"
+    (currently just TweetEval) — Amazon Review Polarity is already binary.
+    """
+    df = df[df[label_column] != "Neutral"].copy()
+    df["sentiment_label"] = df[label_column].map(LABEL2ID)
+    return df

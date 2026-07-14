@@ -13,31 +13,41 @@ manual conversion needed. All verified against fixtures (including a
 synthetic `.zst`); pending the maintainer's real data drop into
 `raw_data/` — see `docs/dataset_guide.md`.
 
-**Epics 3–7 (Phases 3–7) are paused**, at the maintainer's request, on a
-hard environment blocker discovered while starting Phase 3: this session's
-egress policy blocks `huggingface.co` entirely, so no pretrained model
-checkpoint can be downloaded — `AutoTokenizer.from_pretrained("roberta-base")`
-fails outright, and the same applies to DistilBERT and any
-sentence-transformers embedding model BERTopic would use. This isn't a
-compute/scale limitation (that was already scoped via smoke-test profiles)
-— it's a total access issue: none of the three ML models can be
-instantiated at all in this session, pretrained or not.
+**Standing rule as of Phase 3** (applies to every remaining phase): this
+session never stops or pauses because Hugging Face Hub, a GPU, general
+internet access, or a dataset is unavailable. Code is written
+production-ready, assuming those resources are available wherever it
+actually runs; where this session itself can't reach them (e.g.
+`huggingface.co` is blocked by egress policy — confirmed via
+`/__agentproxy/status`, a policy denial, not transient), verification uses
+fully offline substitutes (see `docs/developer_guide.md`, "Testing
+HF-dependent code without network access") rather than stopping. The
+earlier "Epics 3-7 paused" state below no longer applies as of Phase 3.
 
-**To resume**: allowlist `huggingface.co` (and its CDN,
-`cdn-lfs.huggingface.co` / `cdn-lfs-us-1.huggingface.co`) in this session's
-egress policy, then continue from Epic 3 in this same breakdown.
-
-**Sentiment architecture finalized before resuming Phase 3**: Model 1 is
-now **binary** (0=Negative, 1=Positive), not 3-class, because the only
+**Sentiment architecture finalized before implementing Phase 3**: Model 1
+is **binary** (0=Negative, 1=Positive), not 3-class, because the only
 training dataset (Amazon Review Polarity) has no Neutral class.
-`brandparadigm.preprocessing.label_mapping`, `configs/sentiment_config.yaml`
-(new — `task_type: binary`, `num_labels: 2`), `scripts/run_preprocessing.py`
-(TweetEval's Neutral rows now dropped before binary label mapping), and all
-affected tests/docs were updated accordingly — see
-`docs/model_cards/roberta_sentiment.md` for the full rationale. No dataset
-loader logic changed as a result — `brandparadigm/datasets` still decodes
-every raw label faithfully (including TweetEval's Neutral); only
-preprocessing's label-mapping step is binary-aware.
+`brandparadigm.preprocessing.label_mapping.prepare_binary_sentiment_labels`
+is the single shared function that drops TweetEval's Neutral rows and maps
+the rest to 0/1 — used by both `scripts/run_preprocessing.py` and
+`brandparadigm.sentiment.evaluate`. See
+`docs/model_cards/roberta_sentiment.md` for the full rationale.
+
+**Epic 3 (Phase 3) is implemented, tested, and pushed**: the full binary
+sentiment pipeline (`brandparadigm/sentiment/` — `model.py`, `dataset.py`,
+`train.py`, `evaluate.py`, `predict.py`), config-driven hyperparameters
+(`configs/sentiment_config.yaml`), early stopping, and artifact saving
+(`models/sentiment/metrics.json`, `confusion_matrix.json`,
+`classification_report.json`, `training_history.json`). Base checkpoint:
+`cardiffnlp/twitter-roberta-base-sentiment`, fine-tuned with a fresh binary
+head. **No actual fine-tuning run has executed** in this session (still
+blocked on `huggingface.co`), but the `Trainer` orchestration itself is
+integration-tested end-to-end with a fully offline tiny model/tokenizer —
+see `tests/sentiment/` and `docs/model_cards/roberta_sentiment.md`,
+"Testing".
+
+**Epics 4–7 (Phases 4–7) are next**, not paused — to be implemented under
+the same standing rule above.
 
 This document is the project-management source of truth in lieu of a live
 GitHub Projects board (the tools available to this session can create

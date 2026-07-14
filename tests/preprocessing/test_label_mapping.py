@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 from brandparadigm.preprocessing.label_mapping import (
@@ -6,6 +7,7 @@ from brandparadigm.preprocessing.label_mapping import (
     SENTIMENT_CLASSES,
     TWEETEVAL_RAW_CLASSES,
     amazon_polarity_to_sentiment,
+    prepare_binary_sentiment_labels,
     tweeteval_label_to_sentiment,
 )
 
@@ -38,3 +40,17 @@ def test_tweeteval_label_to_sentiment_decodes_raw_3_class_encoding(label, expect
 def test_label_id_roundtrip():
     for label in SENTIMENT_CLASSES:
         assert ID2LABEL[LABEL2ID[label]] == label
+
+
+def test_prepare_binary_sentiment_labels_drops_neutral_and_maps_to_int():
+    df = pd.DataFrame({"label": ["Positive", "Negative", "Neutral"]})
+    out = prepare_binary_sentiment_labels(df, label_column="label")
+    assert len(out) == 2
+    assert "Neutral" not in out["label"].values
+    assert list(out["sentiment_label"]) == [1, 0]
+
+
+def test_prepare_binary_sentiment_labels_all_neutral_yields_empty():
+    df = pd.DataFrame({"label": ["Neutral", "Neutral"]})
+    out = prepare_binary_sentiment_labels(df, label_column="label")
+    assert len(out) == 0

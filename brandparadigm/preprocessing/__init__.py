@@ -5,6 +5,7 @@ from brandparadigm.preprocessing.label_mapping import (
     SENTIMENT_CLASSES,
     TWEETEVAL_RAW_CLASSES,
     amazon_polarity_to_sentiment,
+    prepare_binary_sentiment_labels,
     tweeteval_label_to_sentiment,
 )
 from brandparadigm.preprocessing.tokenization import truncate_to_word_limit, word_count
@@ -16,6 +17,7 @@ __all__ = [
     "SENTIMENT_CLASSES",
     "TWEETEVAL_RAW_CLASSES",
     "amazon_polarity_to_sentiment",
+    "prepare_binary_sentiment_labels",
     "tweeteval_label_to_sentiment",
     "truncate_to_word_limit",
     "word_count",
