@@ -1,58 +1,77 @@
-"""Dataset 2 — TweetEval (evaluation only, never trained on).
+"""Dataset 2 — TweetEval `sentiment` task only (evaluation, never trained on).
 
-Downloaded directly from the official cardiffnlp/tweeteval GitHub repo —
-the `sentiment` task's `train`/`val`/`test` splits are plain text files
-hosted at `config["base_url"]`, no Hugging Face Hub access required.
+Local CSV export limited to the `sentiment` task
+(`sentiment_train.csv` / `sentiment_validation.csv` / `sentiment_test.csv`)
+— every other TweetEval task (emotion, hate, irony, offensive, ...) is
+ignored entirely.
 """
 
-import httpx
+from pathlib import Path
+
 import pandas as pd
 
+from brandparadigm.datasets.local_source import first_matching_column, require_local_file
 from brandparadigm.logging import get_logger
-from brandparadigm.preprocessing.label_mapping import tweeteval_label_to_sentiment
+from brandparadigm.preprocessing.label_mapping import (
+    SENTIMENT_CLASSES,
+    tweeteval_label_to_sentiment,
+)
 
 logger = get_logger(__name__)
 
-_TIMEOUT = httpx.Timeout(30.0)
+_CANONICAL_BY_LOWER = {label.lower(): label for label in SENTIMENT_CLASSES}
 
 
-def _fetch_text(url: str) -> list[str]:
-    response = httpx.get(url, timeout=_TIMEOUT, follow_redirects=True)
-    response.raise_for_status()
-    return response.text.splitlines()
+def _normalize_label(value) -> str:
+    """Accept either the original 0/1/2 int encoding or already-string labels."""
+    text = str(value).strip()
+    if text.lstrip("-").isdigit():
+        return tweeteval_label_to_sentiment(int(text))
+    canonical = _CANONICAL_BY_LOWER.get(text.lower())
+    if canonical is None:
+        raise ValueError(f"Unrecognized TweetEval sentiment label: {value!r}")
+    return canonical
 
 
 def load_tweeteval(
     config: dict, split: str = "test", sample_size: int | None = None
 ) -> pd.DataFrame:
-    """Load a TweetEval sentiment split, normalized to [text, label, source].
+    """Load a TweetEval `sentiment` split, normalized to [text, label, source].
 
     Args:
         config: the `tweet_eval` section of configs/data_config.yaml.
-        split: one of config["splits"] ("train"/"val"/"test"). Per the spec
-            this dataset is for evaluation only — do not use "train" to fit
-            the sentiment model.
-        sample_size: if set, take at most this many rows (deterministic head,
-            since the upstream file order is not itself random).
+        split: one of config["files"] keys ("train"/"validation"/"test").
+            Per the spec this dataset is for evaluation only — do not use
+            "train" to fit the sentiment model.
+        sample_size: if set, randomly sample at most this many rows.
     """
-    if split not in config["splits"]:
-        raise ValueError(f"Unknown split '{split}', expected one of {config['splits']}")
+    files = config["files"]
+    if split not in files:
+        raise ValueError(f"Unknown split '{split}', expected one of {list(files)}")
 
-    base_url = config["base_url"]
-    texts = _fetch_text(f"{base_url}/{split}_text.txt")
-    labels = _fetch_text(f"{base_url}/{split}_labels.txt")
-    if len(texts) != len(labels):
+    path = Path(config["raw_data_dir"]) / files[split]
+    require_local_file(path)
+    raw = pd.read_csv(path)
+
+    text_col = first_matching_column(raw, config["text_columns"])
+    label_col = first_matching_column(raw, config["label_columns"])
+    if text_col is None or label_col is None:
         raise ValueError(
-            f"Mismatched text/label counts for split '{split}': {len(texts)} vs {len(labels)}"
+            f"Could not find a text/label column in {list(raw.columns)}. "
+            f"Expected one of {config['text_columns']} and {config['label_columns']}."
         )
 
     df = pd.DataFrame(
-        {"text": texts, "label": [tweeteval_label_to_sentiment(int(raw)) for raw in labels]}
+        {
+            "text": raw[text_col].astype(str),
+            "label": raw[label_col].map(_normalize_label),
+        }
     )
+    df = df[df["text"].str.strip() != ""]
     df["source"] = "tweet_eval"
 
     if sample_size is not None and len(df) > sample_size:
-        df = df.head(sample_size).reset_index(drop=True)
+        df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
 
-    logger.info("Loaded %d TweetEval (%s) rows", len(df), split)
-    return df
+    logger.info("Loaded %d TweetEval sentiment (%s) rows", len(df), split)
+    return df.reset_index(drop=True)

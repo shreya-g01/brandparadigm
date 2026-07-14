@@ -51,9 +51,9 @@ Dashboard (Streamlit) / API (FastAPI)
 
 | # | Dataset | Role | Notes |
 |---|---------|------|-------|
-| 1 | Amazon Reviews (`McAuley-Lab/Amazon-Reviews-2023`, Electronics / Cell_Phones_and_Accessories) | Train Model 1 | `text` + `rating` → 3-class label (1–2★ Negative, 3★ Neutral, 4–5★ Positive) |
-| 2 | TweetEval (`tweet_eval`, `sentiment` config) | Evaluate Model 1 only | Never trained on — held out to test generalization beyond Amazon's domain |
-| 3 | Historical Reddit dump (`webis/tldr-17`, filtered to tech/product subreddits) | Inference for Models 1–3, dashboard | Static historical dump, no live Reddit API |
+| 1 | Amazon Review Polarity (Zhang et al.), local `train.csv`/`test.csv` | Train Model 1 | Binary `polarity` (1=Negative, 2=Positive) — no Neutral class from this source |
+| 2 | TweetEval, `sentiment` task only, local `sentiment_{train,validation,test}.csv` | Evaluate Model 1 only | Never trained on — held out to test generalization beyond Amazon's domain; every other TweetEval task ignored |
+| 3 | Historical Reddit Submissions archive (`RS_2019-04.zst`), read directly, filtered to tech/product subreddits | Inference for Models 1–3, dashboard | Static historical dump, no live Reddit API; default 20,000-row sample |
 
 See `docs/dataset_guide.md` for the exact configs confirmed during Phase 2
 and their schemas.

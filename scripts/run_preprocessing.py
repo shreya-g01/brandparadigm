@@ -14,7 +14,7 @@ import pandas as pd
 from brandparadigm.config.paths import PROCESSED_DATA_DIR
 from brandparadigm.datasets import DATASET_NAMES
 from brandparadigm.logging import get_logger
-from brandparadigm.preprocessing import clean_text, star_rating_to_sentiment
+from brandparadigm.preprocessing import amazon_polarity_to_sentiment, clean_text
 from brandparadigm.utils import ensure_dir
 
 logger = get_logger(__name__)
@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 def preprocess_amazon(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["text"] = df["text"].map(clean_text)
-    df["sentiment_label"] = df["rating"].map(star_rating_to_sentiment)
+    df["sentiment_label"] = df["polarity"].map(amazon_polarity_to_sentiment)
     return df[df["text"].str.len() > 0].reset_index(drop=True)
 
 

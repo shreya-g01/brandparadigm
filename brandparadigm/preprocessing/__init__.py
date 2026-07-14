@@ -3,7 +3,7 @@ from brandparadigm.preprocessing.label_mapping import (
     ID2LABEL,
     LABEL2ID,
     SENTIMENT_CLASSES,
-    star_rating_to_sentiment,
+    amazon_polarity_to_sentiment,
     tweeteval_label_to_sentiment,
 )
 from brandparadigm.preprocessing.tokenization import truncate_to_word_limit, word_count
@@ -13,7 +13,7 @@ __all__ = [
     "ID2LABEL",
     "LABEL2ID",
     "SENTIMENT_CLASSES",
-    "star_rating_to_sentiment",
+    "amazon_polarity_to_sentiment",
     "tweeteval_label_to_sentiment",
     "truncate_to_word_limit",
     "word_count",
