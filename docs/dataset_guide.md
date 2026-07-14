@@ -57,6 +57,16 @@ dataset is binary — there is no Neutral class from this source, which is
 why the project's production sentiment scheme is binary end-to-end (see
 "Binary sentiment" above).
 
+**Large-file loading**: `train.csv` is several million rows. Training
+profiles that request a sample (e.g. `smoke_test`'s `train_sample_size:
+200`) never load the whole file — `brandparadigm.datasets.local_source.read_csv_sampled`
+streams it in `amazon_reviews.chunk_size`-row chunks (default 50,000) and
+samples via `amazon_reviews.sampling_strategy`: `"reservoir"` (default,
+true uniform random sample, one full pass over the file) or `"head"`
+(fast first-N-rows read, not statistically representative — good for
+quick dev iteration only). See `docs/model_cards/roberta_sentiment.md`
+("Data loading") for the full trade-off.
+
 **Loader**: `brandparadigm.datasets.load_amazon_reviews(config, split=...)`
 — `split` is `"train"`, `"test"`, or `"all"` (concatenates both files).
 Per this refactor, **`train.csv` is used for training and `test.csv` for

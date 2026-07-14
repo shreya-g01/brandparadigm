@@ -2,6 +2,8 @@
 
 import numpy as np
 import pandas as pd
+import torch
+from datasets import Dataset
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -10,6 +12,7 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
 )
+from transformers import PreTrainedModel
 
 from brandparadigm.datasets import load_dataset
 from brandparadigm.logging import get_logger
@@ -20,6 +23,8 @@ from brandparadigm.preprocessing import (
 )
 
 logger = get_logger(__name__)
+
+DEFAULT_EVAL_BATCH_SIZE = 32
 
 
 def compute_metrics(eval_pred) -> dict:
@@ -51,6 +56,33 @@ def build_evaluation_report(y_true, y_pred) -> dict:
             zero_division=0,
         ),
     }
+
+
+def run_batched_inference(
+    model: PreTrainedModel, dataset: Dataset, batch_size: int = DEFAULT_EVAL_BATCH_SIZE
+) -> tuple[np.ndarray, np.ndarray]:
+    """Run a torch-formatted, tokenized `Dataset` through `model` in batches.
+
+    Used by `scripts/run_evaluation.py` for standalone evaluation of an
+    already-trained model (outside the `Trainer`, which does its own
+    batching during training). Kept in the package rather than the script
+    so the batching logic is reusable and directly testable.
+
+    Returns:
+        `(y_pred, y_true)` as numpy arrays of predicted/true label ids.
+    """
+    model.eval()
+    all_logits = []
+    with torch.no_grad():
+        for i in range(0, len(dataset), batch_size):
+            batch = dataset[i : i + batch_size]
+            outputs = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
+            all_logits.append(outputs.logits)
+
+    logits = torch.cat(all_logits, dim=0)
+    y_pred = logits.argmax(dim=-1).numpy()
+    y_true = np.array(dataset["labels"])
+    return y_pred, y_true
 
 
 def load_tweeteval_eval_set(

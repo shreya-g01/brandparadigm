@@ -17,14 +17,18 @@ package hardcodes a hyperparameter that belongs in config.
 - `train.py` — `train(sentiment_config, data_config, profile=...)`
   orchestrates the full fine-tuning run: loads Amazon Review Polarity
   (`train.csv` for training, `test.csv` for validation/testing), builds
-  `TrainingArguments` entirely from config, wires `EarlyStoppingCallback`,
-  trains, saves the best model/tokenizer plus `metrics.json`,
-  `confusion_matrix.json`, `classification_report.json`, and
-  `training_history.json` under `models/sentiment/`. Accepts an injectable
-  `model_loader` so tests can exercise the full orchestration without
-  network access.
+  `TrainingArguments` entirely from config (including `save_total_limit`),
+  wires `EarlyStoppingCallback`, trains, saves the best model/tokenizer
+  plus `metrics.json`, `confusion_matrix.json`, `classification_report.json`,
+  `training_history.json`, and `metadata.json` (model info, training
+  config, dataset details, git commit hash, library versions, label
+  mapping — see `build_run_metadata`) under `models/sentiment/`. Accepts
+  an injectable `model_loader` so tests can exercise the full
+  orchestration without network access.
 - `evaluate.py` — `compute_metrics` (HF Trainer-compatible: accuracy/
-  precision/recall/F1) and `load_tweeteval_eval_set(...)`, which loads
+  precision/recall/F1), `run_batched_inference(model, dataset, batch_size)`
+  (used by `scripts/run_evaluation.py` for standalone evaluation outside
+  the `Trainer`), and `load_tweeteval_eval_set(...)`, which loads
   TweetEval's `sentiment` split and **automatically drops Neutral rows**
   before returning — evaluation only ever sees the binary label space.
 - `predict.py` — `SentimentPredictor`, the inference wrapper `api/`

@@ -39,6 +39,7 @@ def sentiment_config(tmp_path):
             "seed": 42,
             "eval_strategy": "epoch",
             "save_strategy": "epoch",
+            "save_total_limit": 2,
             "load_best_model_at_end": True,
             "metric_for_best_model": "f1",
             "greater_is_better": True,
@@ -57,7 +58,12 @@ def sentiment_config(tmp_path):
                 }
             },
         },
-        "evaluation": {"dataset": "tweet_eval", "split": "test", "exclude_labels": ["Neutral"]},
+        "evaluation": {
+            "dataset": "tweet_eval",
+            "split": "test",
+            "exclude_labels": ["Neutral"],
+            "batch_size": 8,
+        },
     }
 
 
@@ -97,6 +103,7 @@ def test_train_runs_end_to_end_fully_offline(
         "confusion_matrix.json",
         "classification_report.json",
         "training_history.json",
+        "metadata.json",
     ]:
         path = output_dir / filename
         assert path.exists(), f"missing {filename}"
@@ -130,3 +137,51 @@ def test_build_training_arguments_reads_every_field_from_config(sentiment_config
     assert args.learning_rate == params["learning_rate"]
     assert args.eval_strategy.value == sentiment_config["training"]["eval_strategy"]
     assert args.metric_for_best_model == sentiment_config["training"]["metric_for_best_model"]
+    assert args.save_total_limit == sentiment_config["training"]["save_total_limit"]
+
+
+def test_build_run_metadata_contains_every_required_field(sentiment_config):
+    import pandas as pd
+
+    from brandparadigm.sentiment.train import build_run_metadata
+
+    train_df = pd.DataFrame({"text": ["a", "b"], "sentiment_label": [0, 1]})
+    eval_df = pd.DataFrame({"text": ["c"], "sentiment_label": [1]})
+    params = sentiment_config["training"]["profiles"]["smoke_test"]
+
+    metadata = build_run_metadata(sentiment_config, "smoke_test", params, train_df, eval_df)
+
+    assert metadata["model"]["base_model"] == sentiment_config["model"]["base_model"]
+    assert metadata["model"]["label_mapping"] == sentiment_config["label_mapping"]
+    assert metadata["training_config"]["profile"] == "smoke_test"
+    assert metadata["training_config"]["num_train_epochs"] == params["num_train_epochs"]
+    assert metadata["training_config"]["save_total_limit"] == 2
+    assert metadata["dataset"]["train_rows"] == 2
+    assert metadata["dataset"]["eval_rows"] == 1
+    assert "git_commit_hash" in metadata
+    assert "torch" in metadata["library_versions"]
+    assert "transformers" in metadata["library_versions"]
+
+
+def test_train_metadata_json_is_populated(
+    sentiment_config, data_config, tiny_model, tiny_tokenizer
+):
+    def fake_model_loader(_model_name):
+        return tiny_model, tiny_tokenizer
+
+    result = train(
+        sentiment_config, data_config, profile="smoke_test", model_loader=fake_model_loader
+    )
+
+    metadata_path = Path(result["output_dir"]) / "metadata.json"
+    with open(metadata_path) as f:
+        metadata = json.load(f)
+
+    assert metadata["model"]["base_model"] == "fake/tiny-offline-model"
+    assert metadata["dataset"]["train_rows"] > 0
+    assert metadata["dataset"]["eval_rows"] > 0
+    assert metadata["library_versions"]["torch"] is not None
+    # JSON round-trips dict keys to strings (e.g. label_mapping's 0/1 ->
+    # "0"/"1"), so compare the in-memory result against a JSON round-trip
+    # of itself rather than the raw dict.
+    assert json.loads(json.dumps(result["metadata"])) == metadata

@@ -26,11 +26,20 @@ from brandparadigm.preprocessing import LABEL2ID, amazon_polarity_to_sentiment, 
 from brandparadigm.sentiment.dataset import build_tokenized_dataset
 from brandparadigm.sentiment.evaluate import build_evaluation_report, compute_metrics
 from brandparadigm.sentiment.model import load_model_and_tokenizer
-from brandparadigm.utils import ensure_dir, set_seed, write_json
+from brandparadigm.utils import (
+    ensure_dir,
+    get_git_commit_hash,
+    get_library_versions,
+    set_seed,
+    write_json,
+)
 
 logger = get_logger(__name__)
 
 ModelLoader = Callable[[str], tuple[PreTrainedModel, PreTrainedTokenizerBase]]
+
+# Packages whose versions matter for reproducing a training run.
+_TRACKED_LIBRARIES = ["torch", "transformers", "datasets", "scikit-learn", "accelerate"]
 
 
 def _prepare_amazon_split(data_config: dict, split: str, sample_size: int | None) -> pd.DataFrame:
@@ -57,12 +66,57 @@ def build_training_arguments(
         logging_steps=params["logging_steps"],
         eval_strategy=training_cfg["eval_strategy"],
         save_strategy=training_cfg["save_strategy"],
+        save_total_limit=training_cfg["save_total_limit"],
         load_best_model_at_end=training_cfg["load_best_model_at_end"],
         metric_for_best_model=training_cfg["metric_for_best_model"],
         greater_is_better=training_cfg["greater_is_better"],
         seed=training_cfg.get("seed", 42),
         report_to=[],
     )
+
+
+def build_run_metadata(
+    sentiment_config: dict,
+    profile: str,
+    params: dict,
+    train_df: pd.DataFrame,
+    eval_df: pd.DataFrame,
+) -> dict[str, Any]:
+    """Assemble everything needed to reproduce/audit a training run.
+
+    Written to `metadata.json` alongside the model — model info, the exact
+    training configuration used, dataset details, the git commit that
+    produced the run, and installed library versions, so a saved model
+    directory is self-describing months later.
+    """
+    training_cfg = sentiment_config["training"]
+    return {
+        "model": {
+            "base_model": sentiment_config["model"]["base_model"],
+            "task_type": sentiment_config["task_type"],
+            "num_labels": sentiment_config["num_labels"],
+            "max_seq_length": sentiment_config["model"]["max_seq_length"],
+            "label_mapping": sentiment_config["label_mapping"],
+        },
+        "training_config": {
+            "profile": profile,
+            **params,
+            "eval_strategy": training_cfg["eval_strategy"],
+            "save_strategy": training_cfg["save_strategy"],
+            "save_total_limit": training_cfg["save_total_limit"],
+            "metric_for_best_model": training_cfg["metric_for_best_model"],
+            "greater_is_better": training_cfg["greater_is_better"],
+            "seed": training_cfg.get("seed", 42),
+        },
+        "dataset": {
+            "train_dataset": training_cfg["train_dataset"],
+            "validation_dataset": training_cfg["validation_dataset"],
+            "train_rows": len(train_df),
+            "eval_rows": len(eval_df),
+        },
+        "git_commit_hash": get_git_commit_hash(),
+        "library_versions": get_library_versions(_TRACKED_LIBRARIES),
+    }
 
 
 def train(
@@ -83,9 +137,10 @@ def train(
             training loop can be exercised without network access.
 
     Returns:
-        dict with `eval_metrics`, `output_dir`, and `evaluation_report`
-        (confusion matrix + classification report on the held-out
-        Amazon Review Polarity test split).
+        dict with `eval_metrics`, `output_dir`, `evaluation_report`
+        (confusion matrix + classification report on the held-out Amazon
+        Review Polarity test split), and `metadata` (the same dict written
+        to `metadata.json` — see `build_run_metadata`).
     """
     training_cfg = sentiment_config["training"]
     set_seed(training_cfg.get("seed", 42))
@@ -138,9 +193,13 @@ def train(
     write_json(report["classification_report"], output_dir / "classification_report.json")
     write_json(trainer.state.log_history, output_dir / "training_history.json")
 
+    metadata = build_run_metadata(sentiment_config, profile, params, train_df, eval_df)
+    write_json(metadata, output_dir / "metadata.json")
+
     logger.info("Saved best model, tokenizer, and evaluation artifacts to %s", output_dir)
     return {
         "eval_metrics": eval_metrics,
         "output_dir": str(output_dir),
         "evaluation_report": report,
+        "metadata": metadata,
     }

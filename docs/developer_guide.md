@@ -81,6 +81,26 @@ tests for the actual `from_pretrained` call site mock that one boundary
 and assert it's invoked with the right arguments. Reuse this pattern for
 BERTopic/DistilBERT in later phases rather than inventing a new one.
 
+## Reproducibility metadata
+
+Every training run should write a `metadata.json` next to its saved model
+— `brandparadigm.sentiment.train.build_run_metadata` is the reference
+implementation. The generic parts (`get_git_commit_hash`,
+`get_library_versions`) live in `brandparadigm.utils.metadata` precisely
+so Phase 4's BERTopic/topic-classifier training reuses them instead of
+reimplementing git/version lookups — only the model-specific fields
+(base model, label mapping, dataset details, hyperparameters) belong in
+each model's own `build_run_metadata`-style function.
+
+## Large-file loading
+
+`brandparadigm.datasets.local_source.read_csv_sampled` is the pattern for
+any future dataset loader that might face a very large local file:
+sampling happens during a chunked streaming read (reservoir sampling by
+default — a true random sample without materializing the whole file), not
+after a full `pandas.read_csv`. Reuse it rather than writing
+`pd.read_csv(...).sample(...)` again.
+
 ## Running things locally
 
 ```bash

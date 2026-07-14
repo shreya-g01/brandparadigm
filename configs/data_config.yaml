@@ -12,6 +12,11 @@ amazon_reviews:
   train_file: train.csv
   test_file: test.csv
   columns: [polarity, title, text]
+  # Large-file loading strategy (see brandparadigm.datasets.local_source.
+  # read_csv_sampled) — training profiles that request a sample never load
+  # the full file into memory; these two settings control how.
+  chunk_size: 50000 # rows read per streaming chunk
+  sampling_strategy: reservoir # "reservoir" (uniform random, scans whole file) or "head" (first N rows, fast)
 
 tweet_eval:
   # Dataset 2 (evaluation only): local export limited to the `sentiment`
