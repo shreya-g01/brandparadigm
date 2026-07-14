@@ -1,0 +1,86 @@
+# Project Management: Epic → Feature → Task Breakdown
+
+This document is the project-management source of truth in lieu of a live
+GitHub Projects board (the tools available to this session can create
+issues but not a Projects v2 board with custom columns/fields — see note at
+the bottom). Copy the structure below into a Project board manually;
+columns are `Backlog / Ready / In Progress / Review / Testing / Done`.
+
+Each Epic below maps 1:1 to a project phase. Every Task lists acceptance
+criteria, dependencies, priority (P0 highest), and an hour estimate.
+
+## Epic 1 — Repository Scaffold (Phase 1)
+
+| Task | Acceptance Criteria | Depends on | Priority | Est. (h) |
+|---|---|---|---|---|
+| Create monorepo folder structure | All directories in `docs/architecture.md` exist with `__init__.py`/`.gitkeep` | — | P0 | 1 |
+| Packaging (`setup.py`, `pyproject.toml`, requirements) | `pip install -e .` succeeds; black/ruff/pytest configured | Folder structure | P0 | 2 |
+| Config/logging/utils core modules | `get_settings()`, `get_logger()`, `set_seed()` importable and unit-tested | Packaging | P0 | 2 |
+| Makefile + Docker base stage | `make install`, `make lint`, `make test` work; `docker build` succeeds for base stage | Packaging | P1 | 2 |
+| Root docs (README, architecture, installation, this file) | Docs describe the real repo state, no TODOs | All above | P1 | 3 |
+
+## Epic 2 — Datasets (Phase 2)
+
+| Task | Acceptance Criteria | Depends on | Priority | Est. (h) |
+|---|---|---|---|---|
+| Amazon Reviews loader | Confirms live HF config names, returns normalized `{text, rating, source}` | Epic 1 | P0 | 3 |
+| TweetEval loader | Loads `tweet_eval`/`sentiment`, normalized schema | Epic 1 | P0 | 1 |
+| Reddit historical loader | Confirms live HF dataset, filters to product/tech subreddits | Epic 1 | P0 | 3 |
+| Preprocessing (clean text, label mapping) | Unit-tested against fixtures; star rating → 3-class mapping matches spec | Loaders | P0 | 3 |
+| Dataset guide + EDA | `docs/dataset_guide.md` documents confirmed configs, schema, label distribution | Loaders, preprocessing | P1 | 2 |
+
+## Epic 3 — Sentiment Model (Phase 3)
+
+| Task | Acceptance Criteria | Depends on | Priority | Est. (h) |
+|---|---|---|---|---|
+| RoBERTa model/tokenizer wrapper | 3-class head, label2id fixed and tested | Epic 2 | P0 | 2 |
+| Training pipeline (`Trainer`, config-driven) | `smoke_test` profile runs end-to-end on CPU, checkpoint persists | Model wrapper | P0 | 4 |
+| Evaluation on TweetEval | Never trains on TweetEval; reports accuracy/F1/confusion matrix | Training pipeline | P0 | 2 |
+| Inference wrapper for API | `predict(text) -> {label, scores}` | Training pipeline | P0 | 1 |
+| Model card | Data, procedure, smoke-test metrics, GPU full-run instructions | All above | P1 | 1 |
+
+## Epic 4 — Topic Discovery & Classifier (Phase 4)
+
+| Task | Acceptance Criteria | Depends on | Priority | Est. (h) |
+|---|---|---|---|---|
+| BERTopic pipeline | Fits on Reddit sample with CPU-sized UMAP/HDBSCAN params | Epic 2 | P0 | 4 |
+| Manual topic validation mapping | `configs/topic_label_mapping.yaml` maps discovered topics → 7 categories | BERTopic pipeline | P0 | 2 |
+| Logistic Regression classifier | TF-IDF + LogReg trained/evaluated on mapped labels | Topic mapping | P0 | 2 |
+| DistilBERT classifier | Fine-tuned smoke-test run on same labels | Topic mapping | P0 | 3 |
+| Model comparison + selection | `compare.py` picks best by F1, writes model card | Both classifiers | P0 | 1 |
+
+## Epic 5 — API (Phase 5)
+
+| Task | Acceptance Criteria | Depends on | Priority | Est. (h) |
+|---|---|---|---|---|
+| FastAPI app skeleton + DI | `/health` returns 200; models loaded via dependency injection | Epics 3–4 | P0 | 2 |
+| `/predict_sentiment`, `/predict_topic` | Pydantic-validated request/response, unit-tested | App skeleton | P0 | 2 |
+| `/analyze_brand`, `/model_metrics` | Aggregates via `brandparadigm.analytics`; metrics read from model cards | App skeleton | P0 | 3 |
+| API tests + OpenAPI docs | `pytest tests/api` green; `/docs` renders all 5 endpoints | All above | P1 | 2 |
+
+## Epic 6 — Dashboard (Phase 6)
+
+| Task | Acceptance Criteria | Depends on | Priority | Est. (h) |
+|---|---|---|---|---|
+| Home + navigation | Streamlit multipage app boots | Epic 5 | P0 | 1 |
+| Sentiment Analysis, Topic Explorer pages | Charts render from API/package data | Home | P0 | 3 |
+| Brand Comparison, Model Performance, About pages | Charts render, no business logic in page files | Home | P0 | 3 |
+| Dashboard smoke tests (`AppTest`) | Every page loads without exception in `pytest` | All pages | P1 | 1 |
+
+## Epic 7 — Docker, Testing, Deployment (Phase 7)
+
+| Task | Acceptance Criteria | Depends on | Priority | Est. (h) |
+|---|---|---|---|---|
+| Finalize Dockerfile (API + dashboard CMDs) | `docker build` + `docker run` serve `/health` | Epics 5–6 | P0 | 2 |
+| Full test suite pass | `pytest` green across all mirrored test dirs | All epics | P0 | 2 |
+| Deployment/demo/developer/API docs | All docs in `docs/` reflect final state, no TODOs | All epics | P1 | 3 |
+| Final README polish | Roadmap marked complete, quickstart verified | All above | P1 | 1 |
+
+---
+
+**Note on GitHub Projects tooling**: the GitHub MCP tools available to this
+session can create issues, labels, milestones, and sub-issue links, but
+cannot create or configure a Projects v2 board (columns, custom fields like
+Priority/Estimated Hours). Per the maintainer's decision, no GitHub Issues
+were created for this breakdown — copy the tables above into issues/a board
+manually if you want them tracked in GitHub's UI.
