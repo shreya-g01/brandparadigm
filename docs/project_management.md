@@ -1,5 +1,30 @@
 # Project Management: Epic → Feature → Task Breakdown
 
+## Current status (2026-07-14)
+
+**Epics 1–2 (Phases 1–2) are complete, tested, and pushed** to
+`claude/brandparadigm-spec-wubwi9`: full repo scaffold, tooling, and the
+dataset loading/preprocessing pipeline (TweetEval verified live; Amazon
+Reviews/Reddit verified against fixtures, pending your real data drop —
+see `docs/dataset_guide.md`).
+
+**Epics 3–7 (Phases 3–7) are paused**, at the maintainer's request, on a
+hard environment blocker discovered while starting Phase 3: this session's
+egress policy blocks `huggingface.co` entirely, so no pretrained model
+checkpoint can be downloaded — `AutoTokenizer.from_pretrained("roberta-base")`
+fails outright, and the same applies to DistilBERT and any
+sentence-transformers embedding model BERTopic would use. This isn't a
+compute/scale limitation (that was already scoped via smoke-test profiles)
+— it's a total access issue: none of the three ML models can be
+instantiated at all in this session, pretrained or not.
+
+**To resume**: allowlist `huggingface.co` (and its CDN,
+`cdn-lfs.huggingface.co` / `cdn-lfs-us-1.huggingface.co`) in this session's
+egress policy, then continue from Epic 3 in this same breakdown. No code
+already written needs to change — `brandparadigm/config`,
+`brandparadigm/datasets`, and `brandparadigm/preprocessing` are all
+model-access-independent.
+
 This document is the project-management source of truth in lieu of a live
 GitHub Projects board (the tools available to this session can create
 issues but not a Projects v2 board with custom columns/fields — see note at
