@@ -52,6 +52,25 @@ def test_sample_size_caps_rows(config):
     assert len(df) == 2
 
 
+def test_sample_size_with_small_chunk_size_forces_multiple_chunks(config):
+    # 5-row fixture, chunk_size=2 -> 3 chunks read; reservoir sampling must
+    # still work correctly across chunk boundaries.
+    config = {**config, "chunk_size": 2}
+    df = load_amazon_reviews(config, split="train", sample_size=3)
+    assert len(df) == 3
+
+
+def test_head_sampling_strategy_takes_first_rows(config):
+    config = {**config, "sampling_strategy": "head"}
+    df = load_amazon_reviews(config, split="train", sample_size=2)
+    assert len(df) == 2
+
+
+def test_sample_size_larger_than_file_returns_all_rows(config):
+    df = load_amazon_reviews(config, split="train", sample_size=1000)
+    assert len(df) == 5
+
+
 def test_missing_file_raises(tmp_path):
     config = {
         "raw_data_dir": str(tmp_path / "does_not_exist"),

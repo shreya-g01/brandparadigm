@@ -2,12 +2,15 @@ import shutil
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
+from brandparadigm.sentiment.dataset import build_tokenized_dataset
 from brandparadigm.sentiment.evaluate import (
     build_evaluation_report,
     compute_metrics,
     load_tweeteval_eval_set,
+    run_batched_inference,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "tweeteval_sentiment_sample.csv"
@@ -69,3 +72,28 @@ def test_load_tweeteval_eval_set_sample_size_caps_before_neutral_filtering(data_
     # dropped — so the final count can be <= sample_size, not necessarily ==.
     df = load_tweeteval_eval_set(data_config, split="test", sample_size=2)
     assert len(df) <= 2
+
+
+def test_run_batched_inference_returns_predictions_and_labels(tiny_model, tiny_tokenizer):
+    df = pd.DataFrame(
+        {"text": ["good phone", "bad battery", "great camera"], "sentiment_label": [1, 0, 1]}
+    )
+    dataset = build_tokenized_dataset(df, tiny_tokenizer, max_length=8)
+
+    y_pred, y_true = run_batched_inference(tiny_model, dataset, batch_size=2)
+
+    assert len(y_pred) == 3
+    assert list(y_true) == [1, 0, 1]
+    assert set(y_pred).issubset({0, 1})
+
+
+def test_run_batched_inference_batch_size_does_not_change_results(tiny_model, tiny_tokenizer):
+    df = pd.DataFrame(
+        {"text": ["good", "bad", "great", "terrible", "okay"], "sentiment_label": [1, 0, 1, 0, 1]}
+    )
+    dataset = build_tokenized_dataset(df, tiny_tokenizer, max_length=8)
+
+    y_pred_batch_1, _ = run_batched_inference(tiny_model, dataset, batch_size=1)
+    y_pred_batch_100, _ = run_batched_inference(tiny_model, dataset, batch_size=100)
+
+    assert list(y_pred_batch_1) == list(y_pred_batch_100)

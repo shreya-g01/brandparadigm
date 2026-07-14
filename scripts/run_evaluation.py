@@ -9,13 +9,14 @@ model's tokenizer/config the same way training did.
 import argparse
 import sys
 
-import numpy as np
-import torch
-
 from brandparadigm.config.paths import CONFIGS_DIR
 from brandparadigm.logging import get_logger
 from brandparadigm.sentiment.dataset import build_tokenized_dataset
-from brandparadigm.sentiment.evaluate import build_evaluation_report, load_tweeteval_eval_set
+from brandparadigm.sentiment.evaluate import (
+    build_evaluation_report,
+    load_tweeteval_eval_set,
+    run_batched_inference,
+)
 from brandparadigm.sentiment.model import load_trained_model_and_tokenizer
 from brandparadigm.utils import read_yaml, write_json
 
@@ -30,6 +31,12 @@ def parse_args() -> argparse.Namespace:
         help="Directory of the fine-tuned model (defaults to sentiment_config.yaml::training.output_dir).",
     )
     parser.add_argument("--sample-size", type=int, default=None)
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Overrides sentiment_config.yaml::evaluation.batch_size.",
+    )
     parser.add_argument("--sentiment-config", default=str(CONFIGS_DIR / "sentiment_config.yaml"))
     parser.add_argument("--data-config", default=str(CONFIGS_DIR / "data_config.yaml"))
     return parser.parse_args()
@@ -42,7 +49,6 @@ def main() -> int:
 
     model_dir = args.model_dir or sentiment_config["training"]["output_dir"]
     model, tokenizer = load_trained_model_and_tokenizer(model_dir)
-    model.eval()
 
     eval_df = load_tweeteval_eval_set(
         data_config, split=sentiment_config["evaluation"]["split"], sample_size=args.sample_size
@@ -50,16 +56,8 @@ def main() -> int:
     max_length = sentiment_config["model"]["max_seq_length"]
     eval_dataset = build_tokenized_dataset(eval_df, tokenizer, max_length=max_length)
 
-    all_logits = []
-    with torch.no_grad():
-        for i in range(0, len(eval_dataset), 32):
-            batch = eval_dataset[i : i + 32]
-            outputs = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
-            all_logits.append(outputs.logits)
-
-    logits = torch.cat(all_logits, dim=0)
-    y_pred = logits.argmax(dim=-1).numpy()
-    y_true = np.array(eval_dataset["labels"])
+    batch_size = args.batch_size or sentiment_config["evaluation"]["batch_size"]
+    y_pred, y_true = run_batched_inference(model, eval_dataset, batch_size=batch_size)
 
     report = build_evaluation_report(y_true, y_pred)
     out_path = f"{model_dir}/tweeteval_evaluation_report.json"

@@ -36,6 +36,11 @@ training:
   load_best_model_at_end: true
   metric_for_best_model: f1
   greater_is_better: true
+  # Caps how many epoch checkpoints accumulate under output_dir/checkpoints/
+  # (each is a full model+optimizer+scheduler snapshot) — without this, a
+  # multi-epoch "full" run would keep every epoch's checkpoint on disk
+  # indefinitely. 2 keeps the most recent checkpoint plus the best one.
+  save_total_limit: 2
 
   # Hyperparameter profiles selected via `--profile` on
   # scripts/run_training_sentiment.py. "smoke_test" is a fast, tiny-sample
@@ -77,3 +82,8 @@ evaluation:
   # used by both scripts/run_preprocessing.py and
   # brandparadigm.sentiment.evaluate.load_tweeteval_eval_set.
   exclude_labels: [Neutral]
+  # Batch size for scripts/run_evaluation.py's manual inference loop. This
+  # is separate from training.profiles.*.per_device_eval_batch_size since
+  # evaluation runs independently of training, potentially long after, and
+  # doesn't use the Trainer's batching.
+  batch_size: 32
