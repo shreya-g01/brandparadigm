@@ -4,9 +4,14 @@
 
 **Epics 1–2 (Phases 1–2) are complete, tested, and pushed** to
 `claude/brandparadigm-spec-wubwi9`: full repo scaffold, tooling, and the
-dataset loading/preprocessing pipeline (TweetEval verified live; Amazon
-Reviews/Reddit verified against fixtures, pending your real data drop —
-see `docs/dataset_guide.md`).
+dataset loading/preprocessing pipeline. All three loaders now target the
+maintainer's actual local data sources: Amazon Review Polarity
+(`train.csv`/`test.csv`), TweetEval's `sentiment` task only
+(`sentiment_{train,validation,test}.csv`), and a Pushshift Reddit
+Submissions archive (`RS_2019-04.zst`) read directly via `zstandard` — no
+manual conversion needed. All verified against fixtures (including a
+synthetic `.zst`); pending the maintainer's real data drop into
+`raw_data/` — see `docs/dataset_guide.md`.
 
 **Epics 3–7 (Phases 3–7) are paused**, at the maintainer's request, on a
 hard environment blocker discovered while starting Phase 3: this session's

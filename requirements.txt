@@ -32,3 +32,6 @@ plotly
 # Text preprocessing
 beautifulsoup4
 emoji
+
+# Dataset archive formats
+zstandard

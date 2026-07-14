@@ -20,22 +20,17 @@
 .vscode/
 .idea/
 
-# Raw data (large historical datasets pulled by scripts/download_datasets.py)
+# Raw data (large historical datasets pulled by scripts/download_datasets.py).
+# Ignoring the directory itself covers every file/extension underneath it
+# (including nested subfolders) — no extension-based rules needed here, so
+# tracked fixtures elsewhere in the repo (e.g. tests/fixtures/*.csv) are
+# never accidentally caught by an overly broad *.csv-style pattern.
 raw_data/*
 !raw_data/.gitkeep
-*.csv
-*.sqlite
-*.zip
-*.parquet
 
-# Saved models / checkpoints
+# Saved models / checkpoints — same reasoning, directory-scoped only.
 models/*
 !models/.gitkeep
-*.joblib
-*.h5
-*.bin
-*.safetensors
-*.pt
 
 # Any pickle files
 *.pickle

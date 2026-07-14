@@ -8,13 +8,9 @@ ID2LABEL = dict(enumerate(SENTIMENT_CLASSES))
 TWEETEVAL_ID2LABEL = {0: "Negative", 1: "Neutral", 2: "Positive"}
 
 
-def star_rating_to_sentiment(rating: float) -> str:
-    """1-2 stars -> Negative, 3 -> Neutral, 4-5 -> Positive (per spec)."""
-    if rating <= 2:
-        return "Negative"
-    if rating == 3:
-        return "Neutral"
-    return "Positive"
+def amazon_polarity_to_sentiment(polarity: int) -> str:
+    """Amazon Review Polarity: 1 -> Negative, 2 -> Positive (binary, no Neutral class)."""
+    return "Negative" if int(polarity) == 1 else "Positive"
 
 
 def tweeteval_label_to_sentiment(label: int) -> str:

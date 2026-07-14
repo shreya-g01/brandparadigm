@@ -1,62 +1,88 @@
 """Dataset 3 — historical Reddit dump (inference only, no live Reddit API).
 
-Provisioned as a user-supplied local export (see docs/dataset_guide.md);
-this loader normalizes whatever schema was exported into
-`{text, subreddit, source}` and optionally filters to a subreddit allowlist.
+Reads a Pushshift Reddit Submissions archive (`RS_YYYY-MM.zst`) directly —
+no manual decompression/conversion required. Streams and filters to the
+configured subreddit allowlist, keeping only
+`[title, selftext, subreddit, score, created_utc]` and combining
+`title` + `selftext` into a single `text` column.
 """
 
-import pandas as pd
+import json
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
-from brandparadigm.datasets.local_source import first_matching_column, load_local_frame
+import pandas as pd
+import zstandard
+
+from brandparadigm.datasets.local_source import require_local_file
 from brandparadigm.logging import get_logger
 
 logger = get_logger(__name__)
 
+_KEEP_FIELDS = ["title", "selftext", "subreddit", "score", "created_utc"]
+_READ_CHUNK_SIZE = 2**20  # 1 MiB
+
+
+def _iter_submissions(archive_path: Path) -> Iterator[dict[str, Any]]:
+    """Yield one decoded JSON object per line of a Pushshift .zst NDJSON dump."""
+    with open(archive_path, "rb") as fh:
+        reader = zstandard.ZstdDecompressor(max_window_size=2**31).stream_reader(fh)
+        buffer = b""
+        while chunk := reader.read(_READ_CHUNK_SIZE):
+            buffer += chunk
+            *lines, buffer = buffer.split(b"\n")
+            for line in lines:
+                if not line:
+                    continue
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+        if buffer.strip():
+            try:
+                yield json.loads(buffer)
+            except json.JSONDecodeError:
+                pass
+
 
 def load_reddit_posts(config: dict, sample_size: int | None = None) -> pd.DataFrame:
-    """Load and normalize the local historical Reddit export.
+    """Stream-filter the Reddit submissions archive into a normalized DataFrame.
 
     Args:
         config: the `reddit` section of configs/data_config.yaml.
-        sample_size: if set, randomly sample at most this many rows.
+        sample_size: cap on the number of matching rows collected (falls
+            back to `config["sample_size"]`, e.g. 20000, when not given).
+            Rows are the first N matches encountered while scanning the
+            archive forward — not a reservoir sample — since the archive is
+            read as a single streaming pass.
 
     Returns:
-        DataFrame with columns [text, subreddit, source].
+        DataFrame with columns
+        [title, selftext, subreddit, score, created_utc, text, source].
     """
-    raw = load_local_frame(config["raw_data_dir"], config["file_pattern"])
+    archive_path = Path(config["raw_data_dir"]) / config["archive_file"]
+    require_local_file(archive_path)
 
-    text_col = first_matching_column(raw, config["text_columns"])
-    if text_col is None:
-        raise ValueError(
-            f"Could not find a text column in {list(raw.columns)}. "
-            f"Expected one of {config['text_columns']}."
-        )
-    title_col = first_matching_column(raw, config.get("title_columns", []))
-    subreddit_col = first_matching_column(raw, config.get("subreddit_columns", []))
+    allowlist = {s.lower() for s in (config.get("subreddit_allowlist") or [])}
+    limit = sample_size if sample_size is not None else config.get("sample_size")
 
-    text = raw[text_col].astype(str)
-    if title_col:
-        text = raw[title_col].astype(str).str.cat(text, sep=" ", na_rep="")
+    rows: list[dict[str, Any]] = []
+    scanned = 0
+    for post in _iter_submissions(archive_path):
+        scanned += 1
+        subreddit = post.get("subreddit")
+        if not subreddit or (allowlist and subreddit.lower() not in allowlist):
+            continue
+        rows.append({field: post.get(field) for field in _KEEP_FIELDS})
+        if limit is not None and len(rows) >= limit:
+            break
 
-    df = pd.DataFrame(
-        {
-            "text": text,
-            "subreddit": raw[subreddit_col] if subreddit_col else "unknown",
-        }
-    )
-    df = df.dropna(subset=["text"])
-    df = df[df["text"].str.strip() != ""]
+    logger.info("Scanned %d submissions in %s, matched %d rows", scanned, archive_path, len(rows))
 
-    allowlist = config.get("subreddit_allowlist")
-    if allowlist and subreddit_col:
-        before = len(df)
-        df = df[df["subreddit"].isin(allowlist)]
-        logger.info("Filtered to allowlisted subreddits: %d -> %d rows", before, len(df))
-
+    df = pd.DataFrame(rows, columns=_KEEP_FIELDS)
+    title = df["title"].fillna("").astype(str)
+    selftext = df["selftext"].fillna("").astype(str)
+    df["text"] = (title + " " + selftext).str.strip()
     df["source"] = "reddit"
-
-    if sample_size is not None and len(df) > sample_size:
-        df = df.sample(n=sample_size, random_state=42).reset_index(drop=True)
-
-    logger.info("Loaded %d Reddit post rows", len(df))
     return df.reset_index(drop=True)
