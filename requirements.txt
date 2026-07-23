@@ -35,3 +35,5 @@ emoji
 
 # Dataset archive formats
 zstandard
+
+httpx
