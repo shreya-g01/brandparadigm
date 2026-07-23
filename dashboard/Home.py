@@ -15,9 +15,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from brandparadigm.config.settings import get_settings  # noqa: E402
 from dashboard.components.charts import sentiment_donut, sentiment_trend, topic_breakdown  # noqa: E402
-from dashboard.components.data import load_dashboard_data  # noqa: E402
-from dashboard.components.model_results import (
-    render_model_results,
+from dashboard.components.data import load_dashboard_data, load_recent_voice  # noqa: E402
+from dashboard.components.api_client import (  # noqa: E402
+    DashboardAPIError,
+    analyze_dataframe,
+    analyze_review,
+    get_model_health,
 )
 
 st.set_page_config(page_title="BrandParadigm | Intelligence", page_icon="◈", layout="wide")
@@ -67,8 +70,14 @@ def get_data():
     return load_dashboard_data()
 
 
+@st.cache_data(ttl=60)
+def get_recent_voice():
+    return load_recent_voice()
+
+
 data = get_data()
 reviews = data.reviews
+recent_voice = get_recent_voice()
 settings = get_settings()
 CHART_CONFIG = {
     "displayModeBar": True,
@@ -118,6 +127,55 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+with st.expander("Live model analysis", expanded=False):
+    if st.button("Check API and model status"):
+        try:
+            health = get_model_health()
+            for model in health.get("models", []):
+                icon = "🟢" if model["loaded"] else "⚪"
+                st.caption(
+                    f"{icon} {model['name'].title()}: "
+                    f"{model.get('version') or model.get('error')}"
+                )
+        except DashboardAPIError as exc:
+            st.info(f"Start the API to enable live analysis. {exc}")
+
+    with st.form("live-review"):
+        live_text = st.text_area("Customer review")
+        live_brand, live_product, live_source = st.columns(3)
+        brand = live_brand.text_input("Brand", "Unknown")
+        product = live_product.text_input("Product", "Unknown")
+        source = live_source.text_input("Source", "Manual")
+        submitted = st.form_submit_button("Analyze review")
+    if submitted:
+        if not live_text.strip():
+            st.error("Enter a non-empty review.")
+        else:
+            try:
+                result = analyze_review(live_text, brand, product, source)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Sentiment", result["sentiment"], f"{result['sentiment_confidence']:.1%}")
+                c2.metric("Topic", result.get("topic") or "Unavailable")
+                c3.metric("Category", result.get("category") or "Unavailable")
+            except DashboardAPIError as exc:
+                st.error(str(exc))
+
+    upload = st.file_uploader("Analyze a CSV containing a text column", type=["csv"])
+    if upload is not None and st.button("Analyze uploaded reviews"):
+        try:
+            st.session_state["live_results"] = analyze_dataframe(pd.read_csv(upload))
+        except (DashboardAPIError, ValueError) as exc:
+            st.error(str(exc))
+    if "live_results" in st.session_state:
+        live_results = st.session_state["live_results"]
+        st.dataframe(live_results, use_container_width=True)
+        st.download_button(
+            "Download analyzed CSV",
+            live_results.to_csv(index=False),
+            "brandparadigm_analysis.csv",
+            "text/csv",
+        )
+
 total = len(filtered)
 positive = int((filtered["sentiment"] == "Positive").sum())
 negative = int((filtered["sentiment"] == "Negative").sum())
@@ -154,7 +212,15 @@ with insights_col, st.container(border=True):
 
 with st.container(border=True):
     st.markdown('<div class="section-title">Recent customer voice</div><div class="section-sub">Latest high-confidence reviews and social posts</div>', unsafe_allow_html=True)
-    for row in filtered.sort_values(["date", "confidence"], ascending=False).head(6).itertuples():
+    recent_feed = recent_voice.copy() if recent_voice is not None else filtered.copy()
+    if selected_brands:
+        recent_feed = recent_feed[recent_feed["brand"].isin(selected_brands)]
+    if selected_sources:
+        recent_feed = recent_feed[recent_feed["source"].isin(selected_sources)]
+    recent_feed = recent_feed.sort_values(["date", "confidence"], ascending=False).head(6)
+    if recent_feed.empty:
+        st.info("No recent voice entries match the selected filters.")
+    for row in recent_feed.itertuples():
         sentiment_class = "positive" if row.sentiment == "Positive" else "negative"
         st.markdown(
             f'<div class="review"><div class="review-head"><span><b>{escape(str(row.brand))}</b> · {escape(str(row.product))} · {escape(str(row.source))}</span><span>{pd.Timestamp(row.date):%d %b}</span></div>'
@@ -164,28 +230,3 @@ with st.container(border=True):
         )
 
 st.caption("BrandParadigm · Binary RoBERTa sentiment · Topic discovery and classifier status shown when artifacts are available")
-
-
-render_model_results()
-
-st.markdown(
-    """
-    <style>
-    .stMultiSelect [data-baseweb="tag"] {
-        background-color: #D9EEF7 !important;
-        border: 1px solid #68B6D9 !important;
-        color: #17324D !important;
-    }
-
-    .stMultiSelect [data-baseweb="tag"] span {
-        color: #17324D !important;
-    }
-
-    .stMultiSelect [data-baseweb="tag"] svg {
-        color: #17324D !important;
-        fill: #17324D !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)

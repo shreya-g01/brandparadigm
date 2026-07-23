@@ -63,13 +63,35 @@ def _normalise(frame: pd.DataFrame) -> pd.DataFrame:
     aliases = {
         "review": "text",
         "content": "text",
+        "body": "text",
+        "selftext": "text",
+        "created_utc": "date",
+        "subreddit": "source",
         "predicted_sentiment": "sentiment",
+        "sentiment_label": "sentiment",
         "sentiment_confidence": "confidence",
+        "sentiment_score": "confidence",
         "category": "topic",
-        "label": "sentiment",
         "created_at": "date",
     }
-    df = df.rename(columns={key: value for key, value in aliases.items() if key in df.columns})
+    # Never rename a fallback column onto an existing canonical column: Reddit
+    # exports commonly contain both `selftext` and the already-combined `text`.
+    # Duplicate column names make `df["text"]` return a DataFrame and break
+    # downstream groupby aggregations.
+    renames = {
+        source: target
+        for source, target in aliases.items()
+        if source in df.columns and target not in df.columns
+    }
+    df = df.rename(columns=renames)
+    if "topic_label" in df:
+        readable_topics = df["topic_label"].replace("", pd.NA)
+        if "topic" in df:
+            df["topic"] = readable_topics.fillna(
+                df["topic"].map(lambda value: f"Topic {value}" if pd.notna(value) else "Unclassified")
+            )
+        else:
+            df["topic"] = readable_topics
     defaults = {
         "brand": "Unspecified",
         "product": "All products",
@@ -77,45 +99,30 @@ def _normalise(frame: pd.DataFrame) -> pd.DataFrame:
         "text": "Review text unavailable",
         "sentiment": "Unknown",
         "confidence": 0.0,
-        "topic": "Others",
+        "topic": "Unclassified",
     }
     for column, value in defaults.items():
         if column not in df:
             df[column] = value
-
-    df["topic"] = (
-        df["topic"]
-        .fillna("Others")
-        .astype(str)
-        .str.strip()
-        .replace({
-            "": "Others",
-            "Unclassified": "Others",
-        })
-    )
-
     if "date" not in df:
-        df["date"] = pd.Timestamp.today().normalize()
-
-    df["date"] = pd.to_datetime(
-        df["date"],
-        errors="coerce",
-    ).fillna(pd.Timestamp.today())
-
+        df["date"] = pd.date_range(end=pd.Timestamp.today(), periods=len(df), freq="D")
+    date_values = pd.to_numeric(df["date"], errors="coerce")
+    if date_values.notna().any() and date_values.dropna().median() > 100_000_000:
+        df["date"] = pd.to_datetime(date_values, unit="s", errors="coerce")
+    else:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["date"] = df["date"].fillna(pd.Timestamp.today())
     df["sentiment"] = df["sentiment"].astype(str).str.title()
-
-    df["confidence"] = (
-        pd.to_numeric(df["confidence"], errors="coerce")
-        .fillna(0)
-        .clip(0, 1)
-    )
-
+    df["confidence"] = pd.to_numeric(df["confidence"], errors="coerce").fillna(0).clip(0, 1)
     return df[list(defaults) + ["date"]]
-
 
 
 def load_dashboard_data() -> DashboardData:
     candidates = [
+        PROJECT_ROOT / "raw_data" / "processed" / "reddit_enriched.csv",
+        PROJECT_ROOT / "reddit_enriched.csv",
+        PROJECT_ROOT / "bparadigm" / "raw_data" / "processed" / "reddit_enriched.csv",
+        PROJECT_ROOT / "bparadigm" / "reddit_enriched.csv",
         PROJECT_ROOT / "sentiment_baseline_results.csv",
         PROJECT_ROOT / "raw_data" / "processed" / "reviews_analyzed.csv",
         PROJECT_ROOT / "data" / "processed" / "reviews_analyzed.csv",
@@ -126,3 +133,19 @@ def load_dashboard_data() -> DashboardData:
             if not frame.empty:
                 return DashboardData(frame, "analysis output", str(path.relative_to(PROJECT_ROOT)))
     return DashboardData(_normalise(_demo_frame()), "demo", None)
+
+
+def load_recent_voice() -> pd.DataFrame | None:
+    """Load the curated recent-voice feed independently from analytics data."""
+    candidates = [
+        PROJECT_ROOT / "raw_data" / "processed" / "recent_voice.csv",
+        PROJECT_ROOT / "recent_voice.csv",
+        PROJECT_ROOT / "bparadigm" / "raw_data" / "processed" / "recent_voice.csv",
+        PROJECT_ROOT / "bparadigm" / "recent_voice.csv",
+    ]
+    for path in candidates:
+        if path.exists():
+            frame = _normalise(pd.read_csv(path))
+            if not frame.empty:
+                return frame
+    return None

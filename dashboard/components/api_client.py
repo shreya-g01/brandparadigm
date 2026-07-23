@@ -1,125 +1,40 @@
-from __future__ import annotations
-
-import os
 from typing import Any
 
-import httpx
 import pandas as pd
+import httpx
 
+from brandparadigm.config.settings import get_settings
 
-API_BASE_URL = os.getenv(
-    "DASHBOARD_API_BASE_URL",
-    "https://bparadigm-api-554595681018.europe-west1.run.app",
-).rstrip("/")
+API_BASE_URL = get_settings().dashboard_api_base_url.rstrip("/")
 
 
 class DashboardAPIError(RuntimeError):
     pass
 
 
-def request_api(
-    method: str,
-    endpoint: str,
-    **kwargs: Any,
-) -> Any:
+def _request(method: str, path: str, **kwargs: Any) -> Any:
     try:
-        response = httpx.request(
-            method,
-            f"{API_BASE_URL}{endpoint}",
-            **kwargs,
-        )
+        response = httpx.request(method, f"{API_BASE_URL}{path}", **kwargs)
         response.raise_for_status()
         return response.json()
-
     except httpx.HTTPError as exc:
-        raise DashboardAPIError(
-            f"API request failed: {exc}"
-        ) from exc
+        detail = getattr(exc.response, "text", "") if exc.response is not None else ""
+        raise DashboardAPIError(f"BrandParadigm API request failed: {detail or exc}") from exc
 
 
 def get_model_health() -> dict[str, Any]:
-    result = request_api(
-        "GET",
-        "/",
-        timeout=30,
-    )
-
-    return {
-        "status": "healthy",
-        "service": result.get(
-            "service",
-            "sentiment-baseline",
-        ),
-        "models": [
-            {
-                "name": "sentiment",
-                "loaded": True,
-                "version": result.get(
-                    "service",
-                    "sentiment-baseline",
-                ),
-                "error": None,
-            }
-        ],
-    }
+    return _request("GET", "/health", timeout=2)
 
 
-def analyze_review(
-    text: str,
-    brand: str = "Unknown",
-    product: str = "Unknown",
-    source: str = "Manual",
-) -> dict[str, Any]:
-    result = request_api(
-        "GET",
-        "/predict",
-        params={"text": text},
-        timeout=120,
-    )
-
-    return {
-        "text": text,
-        "brand": brand,
-        "product": product,
-        "source": source,
-        "sentiment": result["label"],
-        "sentiment_confidence": result["confidence"],
-        "sentiment_scores": {
-            result["label"]: result["confidence"],
-        },
-        "model_version": "sentiment-baseline",
-    }
+def analyze_review(text: str, brand="Unknown", product="Unknown", source="Manual"):
+    return _request("POST", "/analyze", json={"text": text, "brand": brand, "product": product, "source": source}, timeout=120)
 
 
-def analyze_dataframe(
-    dataframe: pd.DataFrame,
-) -> pd.DataFrame:
-    if "text" not in dataframe.columns:
-        raise ValueError(
-            "The CSV must contain a 'text' column."
-        )
-
-    texts = dataframe["text"].fillna("").astype(str).tolist()
-
-    predictions = request_api(
-        "POST",
-        "/predict_batch",
-        json={"texts": texts},
-        timeout=600,
-    )
-
-    results = dataframe.copy().reset_index(drop=True)
-
-    results["sentiment"] = [
-        prediction["label"]
-        for prediction in predictions
-    ]
-
-    results["sentiment_confidence"] = [
-        prediction["confidence"]
-        for prediction in predictions
-    ]
-
-    results["model_version"] = "sentiment-baseline"
-
-    return results
+def analyze_dataframe(frame: pd.DataFrame) -> pd.DataFrame:
+    if "text" not in frame:
+        raise ValueError("The uploaded CSV must contain a 'text' column.")
+    reviews = []
+    for row in frame.to_dict("records"):
+        reviews.append({key: row.get(key, default) for key, default in {"text": "", "brand": "Unknown", "product": "Unknown", "source": "CSV Upload", "date": None}.items()})
+    result = _request("POST", "/analyze_batch", json={"reviews": reviews}, timeout=600)
+    return pd.DataFrame(result["results"])
