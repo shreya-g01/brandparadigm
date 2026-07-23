@@ -50,4 +50,8 @@ secrets.toml
 mlruns/
 wandb/
 
+
+/bparadigm/
+*.backup.csv
+*.old.csv
 # User defined extras
